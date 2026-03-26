@@ -98,11 +98,13 @@ services:
     volumes:
       - ./frontend/index.js:/app/index.js:z
       - ./frontend/templates:/app/templates:z
+      - ./frontend/wait.sh:/wait.sh:z
     environment:
       - NODE_ENV=development # Set NODE_ENV to 'development'
       - WDS_SOCKET_PORT=0
       - API_BASE_URL=http://issuer:3001
       - FORCE_COLOR=3
+    entrypoint: ["/bin/sh", "/wait.sh", "issuer", "3001", "node", "index.js"]
     depends_on:
       issuer:
         condition: service_healthy
