@@ -27,6 +27,8 @@ services:
       STATUS_LIST_FILE_PATH: /tmp/bitstring/{tenant_id}/{list_number}
     entrypoint: >
       /bin/sh -c '/entrypoint.sh aca-py "$$@"' --
+    # Note: --no-transport should be added to start but currently blocks webhooks - fix in ACA-Py main.
+    # A nice feature would be to have common sets to --block-plugin.
     command: >
       start
         --inbound-transport http 0.0.0.0 3000
@@ -46,13 +48,47 @@ services:
         --log-level DEBUG
         --debug-webhooks
         --plugin oid4vc
+        --plugin jwt_vc_json
         --plugin sd_jwt_vc
         --plugin mso_mdoc
         --plugin status_list.v1_0
         --multitenant
         --multitenant-admin
         --jwt-secret insecure
+        --log-level INFO
         --multitenancy-config wallet_type=single-wallet-askar key_derivation_method=RAW
+        --block-plugin acapy_agent.anoncreds
+        --block-plugin acapy_agent.ledger
+        --block-plugin acapy_agent.revocation
+        --block-plugin acapy_agent.messaging.schemas
+        --block-plugin acapy_agent.messaging.credential_definitions
+        --block-plugin acapy_agent.revocation_anoncreds
+        --block-plugin acapy_agent.anoncreds.default.did_indy
+        --block-plugin acapy_agent.anoncreds.default.did_web
+        --block-plugin acapy_agent.anoncreds.default.legacy_indy
+        --block-plugin acapy_agent.vc
+        --block-plugin acapy_agent.vc.data_integrity
+        --block-plugin acapy_agent.messaging.jsonld
+        --block-plugin acapy_agent.anoncreds.revocation
+        --block-plugin acapy_agent.connections
+        --block-plugin acapy_agent.did.indy
+        --block-plugin acapy_agent.holder
+        --block-plugin acapy_agent.protocols.actionmenu
+        --block-plugin acapy_agent.protocols.basicmessage
+        --block-plugin acapy_agent.protocols.coordinate_mediation
+        --block-plugin acapy_agent.protocols.didexchange
+        --block-plugin acapy_agent.protocols.discovery
+        --block-plugin acapy_agent.protocols.endorse_transaction
+        --block-plugin acapy_agent.protocols.introduction
+        --block-plugin acapy_agent.protocols.issue_credential
+        --block-plugin acapy_agent.protocols.notification
+        --block-plugin acapy_agent.protocols.out_of_band
+        --block-plugin acapy_agent.protocols.present_proof
+        --block-plugin acapy_agent.protocols.problem_report
+        --block-plugin acapy_agent.protocols.revocation_notification
+        --block-plugin acapy_agent.protocols.routing
+        --block-plugin acapy_agent.protocols.trustping
+        --block-plugin acapy_agent.resolver
     healthcheck:
       test: curl -s -o /dev/null -w '%{http_code}' "http://localhost:3001/status/live" | grep "200" > /dev/null
       start_period: 30s
@@ -84,7 +120,7 @@ services:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     command: ["start", "--all", "--config", "/etc/ngrok.yml"]
     healthcheck:
-      test: exit 0
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/4040"]
       interval: 3s
       timeout: 3s
       start_period: 5s
@@ -100,19 +136,20 @@ services:
       - ./frontend/templates:/app/templates:z
       - ./frontend/wait.sh:/wait.sh:z
     environment:
-      - NODE_ENV=development # Set NODE_ENV to 'development'
-      - WDS_SOCKET_PORT=0
-      - API_BASE_URL=http://issuer:3001
-      - FORCE_COLOR=3
-    entrypoint: ["/bin/sh", "/wait.sh", "issuer", "3001", "node", "index.js"]
+      NODE_ENV: development # Set NODE_ENV to 'development'
+      WDS_SOCKET_PORT: 0
+      API_BASE_URL: http://issuer:3001
+      FORCE_COLOR: 3
+      ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN
+      TENANT_SECRET: tenantsecrettoken #Used by the issuer introspect tokens on auth server.
     depends_on:
       issuer:
         condition: service_healthy
 
 
   #setup Auth Server. 
-  #Environment could be sourced from .env.admin and .env.tenant files for local development,
-  #Here we set them explicitly to demo a working config. 
+  #ADMIN_MANAGE_AUTH_TOKEN is sourced from the .env as it is shared with demo-app.
+  #Other environment variables are set explicitly here to show a working configuration.
   #Admin full list: https://github.com/openwallet-foundation/acapy-plugins/blob/main/oid4vc/auth_server/admin/config.py
   #Tenant full list:https://github.com/openwallet-foundation/acapy-plugins/blob/main/oid4vc/auth_server/tenant/config.py
   auth-server:
@@ -129,15 +166,15 @@ services:
       ADMIN_DB_NAME: auth_server_admin
       ADMIN_DB_PORT: 5432
       ADMIN_DB_SCHEMA: admin
-      ADMIN_APP_TITLE: OAuth 2.0 BLAH Authorization Server Admin API
+      ADMIN_APP_TITLE: OAuth 2.0 Authorization Server Admin API
       ADMIN_APP_VERSION: 0.2.0
       ADMIN_APP_ROOT_PATH: /
-      TENANT_ADMIN_INTERNAL_BASE_URL: http://auth-server:9000/internal
-      ADMIN_MANAGE_AUTH_TOKEN: adminsecrettoken # Access the admin API with this token
-      TENANT_ADMIN_INTERNAL_AUTH_TOKEN: admininternaltoken # Issuer request to admin internal - examples
-      ADMIN_INTERNAL_AUTH_TOKEN: admininternaltoken # Admin API request to admin API - examples
+      ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN # Access the admin API with this token
+      ADMIN_INTERNAL_AUTH_TOKEN: $ADMIN_INTERNAL_AUTH_TOKEN # Admin API request to admin API
       ADMIN_TENANT_DB_NAME: auth_server_tenant
       ADMIN_TENANT_DB_SCHEMA: auth
+      TENANT_ADMIN_INTERNAL_BASE_URL: http://auth-server:9000/internal
+      TENANT_ADMIN_INTERNAL_AUTH_TOKEN: $TENANT_ADMIN_INTERNAL_AUTH_TOKEN # TODO BUG must match ADMIN_INTERNAL_AUTH_TOKEN
       TENANT_APP_ROOT_PATH: /
       TENANT_DB_HOST: db
       TENANT_DB_PORT: 5432
@@ -145,7 +182,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
     healthcheck:
       test: >
         curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/healthz" | grep "200" > /dev/null &&
@@ -155,7 +191,7 @@ services:
       timeout: 5s
       retries: 5
   db:
-    image: postgres:10
+    image: postgres:17
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
