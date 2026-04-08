@@ -36,6 +36,8 @@ COPY sd_jwt_vc/ sd_jwt_vc/
 COPY oid4vc/ oid4vc/
 ADD https://github.com/openwallet-foundation/acapy-plugins.git#main:status_list/status_list/ status_list/
 COPY docker/*.yml ./
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh 
 
 ENTRYPOINT ["/bin/bash", "-c", "aca-py \"$@\"", "--"]
 CMD ["start", "--arg-file", "default.yml"]
