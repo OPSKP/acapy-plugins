@@ -47,7 +47,7 @@ echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
 # Run Alembic migrations
 echo $PWD
 ls -la alembic
-python -m alembic/admin/migrate.py
+poetry run python alembic/admin/migrate.py
 
 # Start Admin API
 uvicorn admin.main:app --host 0.0.0.0 --port 9000 &
