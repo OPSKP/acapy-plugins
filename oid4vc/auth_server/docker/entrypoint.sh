@@ -41,6 +41,8 @@ echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
 
 # Run Alembic migrations
 echo $PWD
+which poetry
+poetry --version
 poetry run python alembic/admin/migrate.py
 
 # Start Admin API

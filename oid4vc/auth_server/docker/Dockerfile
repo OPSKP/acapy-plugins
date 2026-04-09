@@ -1,5 +1,5 @@
-FROM python:3.13-slim-bookworm AS base
-
+##FROM python:3.13-slim-bookworm AS base
+FROM python:3.13-slim-bookworm
 WORKDIR /usr/src/app
 
 # Install system dependencies
