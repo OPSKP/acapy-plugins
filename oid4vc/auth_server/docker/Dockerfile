@@ -7,12 +7,13 @@ RUN apt-get update && apt-get install -y curl jq postgresql-client && apt-get cl
 
 # Install Poetry
 ENV POETRY_VERSION=2.1.2
+ENV POETRY_HOME=/usr/local
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # Install Poetry
 # RUN pip install --upgrade pip \
 #     && pip install "poetry==$POETRY_VERSION"
-ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/usr/local/bin:$PATH"
 
 # Copy project files
 COPY pyproject.toml poetry.lock ./
