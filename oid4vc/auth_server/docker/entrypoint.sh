@@ -30,11 +30,6 @@ fi
 export ALEMBIC_DB_URL="postgresql+psycopg://$ADMIN_DB_USER:$ADMIN_DB_PASSWORD@$ADMIN_DB_HOST:5432/$POSTGRES_DB"
 export ALEMBIC_DB_SCHEMA="admin"
 
-## adding for testing
-
-echo $ALEMBIC_DB_URL
-echo $ALEMBIC_DB_SCHEMA
-
 # If these are not unset, they will interfere with the tenant provisioning in the auth server, which also uses Alembic but needs to connect to the tenant DBs with different credentials. 
 unset ALEMBIC_DB_URL
 unset ALEMBIC_DB_SCHEMA
@@ -47,7 +42,7 @@ echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
 # Run Alembic migrations
 echo $PWD
 ls -la alembic
-poetry run python alembic/admin/migrate.py
+/root/.local/bin/poetry run python alembic/admin/migrate.py
 
 # Start Admin API
 uvicorn admin.main:app --host 0.0.0.0 --port 9000 &
