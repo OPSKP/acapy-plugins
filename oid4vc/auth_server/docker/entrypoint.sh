@@ -43,7 +43,7 @@ echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
 echo $PWD
 pip install poetry
 
-/root/.local/bin/poetry run python alembic/admin/migrate.py
+poetry run python alembic/admin/migrate.py
 
 # Start Admin API
 uvicorn admin.main:app --host 0.0.0.0 --port 9000 &
