@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y curl jq postgresql-client && apt-get cl
 
 # Install Poetry
 ENV POETRY_VERSION=2.1.2
-ENV POETRY_HOME="$HOME/poetry"
+ENV POETRY_HOME=/opt/poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="$POETRY_HOME/bin:$PATH"
 
