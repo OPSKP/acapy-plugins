@@ -45,7 +45,7 @@ echo $PWD
 poetry run python alembic/admin/migrate.py
 
 # Start Admin API
-python -m  uvicorn admin.main:app --host 0.0.0.0 --port 9000 &
+poetry run  uvicorn admin.main:app --host 0.0.0.0 --port 9000 &
 # Start Tenant API
-python -m  uvicorn tenant.main:app --host 0.0.0.0 --port 9001 &
+poetry run  uvicorn tenant.main:app --host 0.0.0.0 --port 9001 &
 wait
