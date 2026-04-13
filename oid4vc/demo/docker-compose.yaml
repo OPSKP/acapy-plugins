@@ -35,7 +35,7 @@ services:
         --outbound-transport http
         --endpoint http://issuer:3000
         --admin 0.0.0.0 3001
-        --admin-insecure-mode
+        --admin-api-key $ADMIN_API_KEY
         --webhook-url http://demo-app:3000/webhook
         --webhook-url http://webhook-listener:8080
         --no-ledger
@@ -52,11 +52,9 @@ services:
         --plugin sd_jwt_vc
         --plugin mso_mdoc
         --plugin status_list.v1_0
-        --multitenant
         --multitenant-admin
         --jwt-secret insecure
         --log-level INFO
-        --multitenancy-config wallet_type=single-wallet-askar key_derivation_method=RAW
         --block-plugin acapy_agent.anoncreds
         --block-plugin acapy_agent.ledger
         --block-plugin acapy_agent.revocation
