@@ -4,32 +4,42 @@ label: oid4vc
 # Admin
 admin: [ 0.0.0.0, 3001 ]
 admin-insecure-mode: true
-# admin-api-key: change-me
 
 # Transport
 inbound-transport:
   - [ http, 0.0.0.0, 3000 ]
-  - [ ws, 0.0.0.0, 3002 ]
+
 outbound-transport: http
 endpoint:
-  - http://host.docker.internal:3000
+  - http://${HOSTNAME}:3000
 
 # plugins
 plugin:
   - oid4vc
+  - jwt_vc_json
+  - sd_jwt_vc
+  - mso_mdoc
+  - status_list.v1_0
 
 #config
 genesis-url: https://indy.igrant.io/genesis
 
-# Multi-tenancy
-# multitenant: true
-# jwt-secret: insecure-jwt-secret
-# multitenant-admin: true
+multitenant: true
+multitenant-admin: true
+jwt-secret: insecure
+debug-webhooks: true
 
 # Wallet
 # wallet-name: default
+wallet-name: ${WALLET_NAME}
 wallet-type: askar
-wallet-storage-type: default
+wallet-storage-type: dpostgres_storage
+wallet-key: ${WALLET_KEY}
+wallet-storage-config: ${WALLET_STORAGE_CONFIG}
+wallet-storage-creds: ${WALLET_STORAGE_CREDS}
+
+no-ledger: true
+
 # wallet-key: "insecure, for use in demo only"
 
 log-level: info
@@ -40,3 +50,44 @@ auto-accept-invites: true
 auto-accept-requests: true
 auto-ping-connection: true
 auto-respond-messages: true
+
+multitenancy-config:
+  - wallet_type: single-wallet-askar
+  - key_derivation_method: RAW 
+
+block-plugin: acapy_agent.anoncreds
+block-plugin: acapy_agent.ledger
+block-plugin: acapy_agent.revocation
+block-plugin: acapy_agent.messaging.schemas
+block-plugin: acapy_agent.messaging.credential_definitions
+block-plugin: acapy_agent.revocation_anoncreds
+block-plugin: acapy_agent.anoncreds.default.did_indy
+block-plugin: acapy_agent.anoncreds.default.did_web
+block-plugin: acapy_agent.anoncreds.default.legacy_indy
+block-plugin: acapy_agent.vc
+block-plugin: acapy_agent.vc.data_integrity
+block-plugin: acapy_agent.messaging.jsonld
+block-plugin: acapy_agent.anoncreds.revocation
+block-plugin: acapy_agent.connections
+block-plugin: acapy_agent.did.indy
+block-plugin: acapy_agent.holder
+block-plugin: acapy_agent.protocols.actionmenu
+block-plugin: acapy_agent.protocols.basicmessage
+block-plugin: acapy_agent.protocols.coordinate_mediation
+block-plugin: acapy_agent.protocols.did_rotate
+block-plugin: acapy_agent.protocols.didexchange
+block-plugin: acapy_agent.protocols.discovery
+block-plugin: acapy_agent.protocols.endorse_transaction
+block-plugin: acapy_agent.protocols.introduction
+block-plugin: acapy_agent.protocols.issue_credential
+block-plugin: acapy_agent.protocols.notification
+block-plugin: acapy_agent.protocols.out_of_band
+block-plugin: acapy_agent.protocols.present_proof
+block-plugin: acapy_agent.protocols.problem_report
+block-plugin: acapy_agent.protocols.revocation_notification
+block-plugin: acapy_agent.protocols.routing
+block-plugin: acapy_agent.protocols.trustping
+block-plugin: acapy_agent.resolver
+block-plugin: acapy_agent.settings
+block-plugin: acapy_agent.wallet
+block-plugin: acapy_agent.wallet.keys;
