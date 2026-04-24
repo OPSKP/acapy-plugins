@@ -4,7 +4,7 @@ label: oid4vc
 # Admin
 admin: [ 0.0.0.0, 3001 ]
 admin-insecure-mode: true
-# admin-api-key: change-me
+#admin-api-key: change-me
 
 # Transport
 inbound-transport:
@@ -18,13 +18,11 @@ endpoint:
 plugin:
   - oid4vc
 
-#config
-genesis-url: https://indy.igrant.io/genesis
 
-# Multi-tenancy
-# multitenant: true
-# jwt-secret: insecure-jwt-secret
-# multitenant-admin: true
+## Multi-tenancy
+multitenant: true
+jwt-secret: insecure-jwt-secret
+multitenant-admin: true
 
 # Wallet
 wallet-name: default
