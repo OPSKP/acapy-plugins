@@ -47,7 +47,7 @@ RUN mkdir -p \
     $HOME/log
 
 # Set permissions for OpenShift compatibility
-RUN chown -R $user:root $HOME/.indy_client $HOME/.acapy_agent && \
+RUN chown -R 1001:root $HOME/.indy_client $HOME/.acapy_agent && \
     chmod -R ug+rw $HOME/log $HOME/ledger $HOME/.acapy_agent $HOME/.cache $HOME/.indy_client
 RUN chown -R 1001:root /usr/src/app
 RUN chmod -R g=u /usr/src/app
