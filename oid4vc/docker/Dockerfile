@@ -51,7 +51,8 @@ COPY docker/*.yml ./
 #     chmod -R ug+rw $HOME/log $HOME/ledger $HOME/.acapy_agent $HOME/.cache $HOME/.indy_client
 # RUN chown -R 1001:root /usr/src/app
 # RUN chmod -R g=u /usr/src/app
-# USER 1001
+
+USER $user
 
 ENTRYPOINT ["/bin/bash", "-c", "aca-py \"$@\"", "--"]
 CMD ["start", "--arg-file", "default.yml"]
