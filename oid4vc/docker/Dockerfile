@@ -3,7 +3,7 @@ FROM python:3.13-slim-bookworm AS base
 WORKDIR /usr/src/app
 
 # Install and configure poetry
-USER root
+#USER root
 
 # Install and configure poetry
 WORKDIR /usr/src/app
@@ -23,9 +23,24 @@ RUN mkdir mso_mdoc && touch mso_mdoc/__init__.py
 RUN mkdir status_list && touch status_list/__init__.py
 COPY pyproject.toml poetry.lock README.md ./
 RUN poetry install --without dev --all-extras
-USER $user
+
+#USER $user
 
 FROM python:3.13-bookworm
+
+ARG uid=1001
+ARG user=aries
+ARG acapy_name="acapy-agent"
+ARG HOME=/home/$user
+
+# Add aries user
+RUN useradd -U -ms /bin/bash -u $uid $user
+
+# Add local binaries and aliases to path
+ENV PATH="$HOME/.local/bin:$PATH"
+
+# In order to drop the root user, make directories writable for OpenShift
+RUN usermod -a -G 0 $user
 
 WORKDIR /usr/src/app
 COPY --from=base /usr/src/app/.venv /usr/src/app/.venv
@@ -37,6 +52,8 @@ COPY sd_jwt_vc/ sd_jwt_vc/
 COPY oid4vc/ oid4vc/
 ADD https://github.com/openwallet-foundation/acapy-plugins.git#main:status_list/status_list/ status_list/
 COPY docker/*.yml ./
+RUN chown -R $user:$user /usr/src/app
+RUN chmod -R g=u /usr/src/app
 
 # # Create standard directories for volume mounting and set permissions
 # RUN mkdir -p \
