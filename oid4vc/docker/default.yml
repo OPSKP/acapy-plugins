@@ -30,6 +30,7 @@ plugin:
 multitenant: true
 jwt-secret: insecure
 multitenant-admin: true
+multitenancy-config: '{"wallet_type":"single-wallet-askar","key_derivation_method":"RAW"}'
 
 # Wallet
 wallet-name: issuer
