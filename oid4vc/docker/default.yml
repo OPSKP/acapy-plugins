@@ -28,14 +28,14 @@ plugin:
 
 ## Multi-tenancy
 multitenant: true
-jwt-secret: insecure-jwt-secret
+jwt-secret: insecure
 multitenant-admin: true
 
 # Wallet
-wallet-name: ods_base_wallet
+wallet-name: issuer
 wallet-type: askar
 wallet-storage-type: postgres_storage
-wallet-key: prism_wallet_key
+wallet-key: insecure
 wallet-storage-config: '{"url":"postgres-db:5432"}'
 wallet-storage-creds: '{"account":"postgres","password":"postgres","admin_account":"postgres","admin_password":"postgres"}'
 
