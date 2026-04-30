@@ -28,7 +28,7 @@ plugin:
 
 ## Multi-tenancy
 multitenant: true
-jwt-secret: insecure-jwt-secret
+jwt-secret: insecure
 multitenant-admin: true
 
 # Wallet
