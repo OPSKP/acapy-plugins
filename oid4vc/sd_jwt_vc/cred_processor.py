@@ -64,6 +64,37 @@ class ClaimMetadata:
 class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
     """Credential processor class for sd_jwt_vc format."""
 
+    def credential_metadata(self, supported_cred: dict) -> dict:
+        """Shape issuer metadata for sd_jwt_vc format.
+
+        Lifts ``vct`` from ``format_data`` to the top level (required by
+        OID4VCI spec for SD-JWT VC) and converts the stored claims dict to
+        the spec-compliant array form per OID4VCI 1.0 spec §E.2.2.
+        """
+        format_data = supported_cred.pop("format_data", None) or {}
+        supported_cred.pop("vc_additional_data", None)  # sd_list is internal
+
+        vct = format_data.get("vct")
+
+        cred_metadata = supported_cred.get("credential_metadata") or {}
+        claims = cred_metadata.get("claims")
+        if isinstance(claims, dict):
+            claims_arr = []
+            for claim_name, claim_meta in claims.items():
+                entry: dict = {"path": [claim_name]}
+                if isinstance(claim_meta, dict):
+                    if "display" in claim_meta:
+                        entry["display"] = claim_meta["display"]
+                    if "mandatory" in claim_meta:
+                        entry["mandatory"] = claim_meta["mandatory"]
+                claims_arr.append(entry)
+            cred_metadata["claims"] = claims_arr
+            supported_cred["credential_metadata"] = cred_metadata
+
+        if vct:
+            return {"vct": vct, **supported_cred}
+        return supported_cred
+
     async def issue(
         self,
         body: Any,
@@ -78,8 +109,15 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
         sd_list = supported.vc_additional_data.get("sd_list") or []
         assert isinstance(sd_list, list)
 
-        vct = supported.vc_additional_data.get("vct") or supported.format_data.get("vct")
-        assert vct
+        # Allow missing vct in body if format_data has vct
+        body_vct = body.get("vct")
+        supported_vct = supported.format_data.get("vct")
+        if body_vct is not None and body_vct != supported_vct:
+            raise CredProcessorError("Requested vct does not match offer.")
+
+        vct = body_vct or supported_vct
+        if not vct:
+            raise CredProcessorError("No vct available in body or format_data.")
 
         current_time = int(time.time())
         claims = deepcopy(ex_record.credential_subject)
@@ -96,19 +134,40 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
             )
 
             claims["cnf"] = {"kid": did + "#0", "jwk": pop.holder_jwk}
+        elif pop.holder_x5c:
+            # x5c-bound credential: cnf.x5c holds the holder's certificate chain
+            # (leaf first).  Per SD-JWT VC §4.2.2 the leaf cert identifies the
+            # holder key used for key-binding JWT verification.
+            claims["cnf"] = {"x5c": pop.holder_x5c}
         else:
             raise ValueError("Unsupported pop holder value")
 
+        # If an x5c cert chain is configured in vc_additional_data, use x5c
+        # as the key-identification header (RFC 7517 §4.7); x5c and kid are
+        # mutually exclusive.
+        x5c_chain = (supported.vc_additional_data or {}).get("x5c_cert_chain")
         headers = {
-            "kid": ex_record.verification_method,
-            "typ": "vc+sd-jwt",
+            "typ": supported.format,  # "vc+sd-jwt" or "dc+sd-jwt" per credential config
+            **(
+                {"x5c": x5c_chain}
+                if x5c_chain
+                else {"kid": ex_record.verification_method}
+            ),
         }
 
+        # exp can be provided in credential_subject or vc_additional_data;
+        # default to 1 year from issuance if not set
+        exp_seconds = (
+            claims.pop("exp", None)
+            or supported.vc_additional_data.get("exp_seconds")
+            or (365 * 24 * 3600)
+        )
         claims = {
             **claims,
             "vct": vct,
             "iss": ex_record.issuer_id,
             "iat": current_time,
+            "exp": current_time + int(exp_seconds),
         }
 
         status_handler = context.inject_or(StatusHandler)
@@ -135,7 +194,7 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
         vc_additional = supported.vc_additional_data
         LOGGER.info("QWERTY Validating credential subject: %s against supported: %s", subject, supported)
         assert vc_additional
-       # assert supported.format_data
+        # assert supported.format_data
         claims_metadata = supported.credential_metadata.get("claims")
         sd_list = vc_additional.get("sd_list") or []
 
@@ -148,13 +207,13 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
                 continue
             pointer = JsonPointer(sd)
 
-            # Find the metadata dict whose "path" matches pointer.parts
-            metadata_dict = next(
-                (meta for meta in claims_metadata if meta.get("path") == pointer.parts),
-                None
-            )
-            if metadata_dict:
-                metadata = ClaimMetadata(**metadata_dict)
+            # Skip if no claims metadata defined
+            if claims_metadata is None:
+                continue
+
+            metadata = pointer.resolve(claims_metadata, None)
+            if metadata:
+                metadata = ClaimMetadata(**metadata)
             else:
                 metadata = ClaimMetadata()
 
@@ -166,7 +225,7 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
 
         if missing:
             raise CredProcessorError(
-                "Invalid credential subject; selectively discloseable claim is"
+                "Invalid credential subject; selectively disclosable claim is"
                 f" mandatory but missing: {missing}"
             )
 
@@ -226,8 +285,13 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
         context: AdminRequestContext = profile.context
         config = Config.from_settings(context.settings)
 
+        # Use the client_id (did:jwk) saved on the presentation record as the
+        # expected KB-JWT audience.  The JAR sets client_id = jwk.did so Credo
+        # puts that DID – not the HTTP endpoint URL – in the KB-JWT 'aud' claim.
+        expected_aud = getattr(presentation_record, "client_id", None) or config.endpoint
+
         result = await sd_jwt_verify(
-            profile, presentation, config.endpoint, presentation_record.nonce
+            profile, presentation, expected_aud, presentation_record.nonce
         )
         # TODO: This is a little hacky
         return VerifyResult(result.verified, presentation)
@@ -242,50 +306,6 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
 
         result = await sd_jwt_verify(profile, credential)
         return VerifyResult(result.verified, result.payload)
-
-    def credential_metadata(self, supported_cred: dict) -> dict:
-        """Transform and return metadata for a supported SD-JWT credential."""
-
-        cred_metadata = supported_cred.get("credential_metadata", {})
-        vc_additional_data = supported_cred.get("vc_additional_data", {})
-        vct = vc_additional_data.pop("vct", None) or cred_metadata.pop("vct", None)
-
-        # Convert map-style legacy claims metadata into claims list format
-        claim_map = cred_metadata.get("claims")
-        if claim_map and isinstance(claim_map, dict):
-            allowed_claim_keys = ("mandatory", "display")
-            claims = []
-            for key, value in claim_map.items():
-                claim = {"path": [key]}
-                if isinstance(value, dict):
-                    claim.update(
-                        {
-                            field: value[field]
-                            for field in allowed_claim_keys
-                            if field in value
-                        }
-                    )
-                claims.append(claim)
-
-            cred_metadata["claims"] = claims
-        elif claim_map and isinstance(claim_map, list):
-            cred_metadata["claims"] = [
-                {
-                    "path": claim.get("path"),
-                    **{
-                        field: claim[field]
-                        for field in ("mandatory", "display")
-                        if field in claim
-                    },
-                }
-                for claim in claim_map
-                if isinstance(claim, dict) and "path" in claim
-            ]
-
-        return {
-            "vct": vct,
-            **supported_cred,
-        }
 
 
 class SDJWTIssuerACAPy(SDJWTIssuer):
@@ -465,7 +485,9 @@ class SDJWTVerifierACAPy(SDJWTVerifier):
         if not self._holder_public_key_payload:
             raise ValueError("No holder public key in SD-JWT")
         verified_kb_jwt = await jwt_verify(
-            self.profile, self._unverified_input_key_binding_jwt
+            self.profile,
+            self._unverified_input_key_binding_jwt,
+            cnf=self._holder_public_key_payload,
         )
 
         if verified_kb_jwt.headers["typ"] != self.KB_JWT_TYP_HEADER:
