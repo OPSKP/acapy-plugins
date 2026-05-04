@@ -1257,7 +1257,7 @@ const WALLET_ID = token.settings["wallet.id"];
 async function initializeAuthServer() {
   try {
  
-    const AUTHSERVER="http://auth-server:9000"
+    const AUTHSERVER="http://authserver:9000"
 
     const commonHeaders = {
       accept: "application/json",
@@ -1330,7 +1330,7 @@ async function initializeIssuerMetadata() {
       authorization_servers: [
         {
           public_url: `${AUTHSERVER_NGROK_URL}/tenants/${WALLET_ID}`,
-          private_url: `http://auth-server:9000/tenants/${WALLET_ID}`,
+          private_url: `http://authserver:9000/tenants/${WALLET_ID}`,
           auth_type: "client_secret_basic",
           client_credentials: {
             client_id: "client1",
