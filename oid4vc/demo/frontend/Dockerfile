@@ -8,7 +8,7 @@ COPY ./package*.json ./
 RUN npm install
 RUN npm install -g nodemon
 
-COPY ./templates .
+COPY ./templates ./templates
 COPY ./index.js ./
 
 # COPY ./entrypoint.sh /app/entrypoint.sh
