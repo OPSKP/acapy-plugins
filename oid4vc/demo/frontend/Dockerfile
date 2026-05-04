@@ -1,7 +1,8 @@
 FROM node:18
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y jq netcat-openbsd && rm -rf /var/lib/apt/lists/*
+# Install jq for JSON parsing in entrypoint.sh
+RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 
 COPY ./package*.json ./
 RUN npm install

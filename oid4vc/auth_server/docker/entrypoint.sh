@@ -20,7 +20,7 @@ if ! PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" -lqt | cut -d 
   PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" \
     -v ADMIN_DB_NAME="$ADMIN_DB_NAME" \
     -v ADMIN_DB_USER="$ADMIN_DB_USER" \
-    -v ADMIN_DB_PASSWORD="'${ADMIN_DB_PASSWORD}'" \
+    -v ADMIN_DB_PASSWORD="${ADMIN_DB_PASSWORD}" \
     -f alembic/sql/init.sql
 else
   echo "Database $POSTGRES_DB already exists. Skipping init.sql."
@@ -36,6 +36,29 @@ unset ALEMBIC_DB_SCHEMA
 
 # Need the authserver endpoint
 TUNNEL_ENDPOINT=${TUNNEL_ENDPOINT:-http://ngrok:4040}
+
+WAIT_INTERVAL=${WAIT_INTERVAL:-3}
+WAIT_ATTEMPTS=${WAIT_ATTEMPTS:-10}
+
+liveliness_check () {
+        set -o pipefail
+        for CURRENT_ATTEMPT in $(seq 1 "$WAIT_ATTEMPTS"); do
+                # Use jq to check if the 'issuer' tunnel is available
+                if curl -sf "${1}/api/tunnels" | jq -e 'any(.tunnels[]; .name == "authserver" and .public_url != null)' > /dev/null; then
+                        break
+                else
+                        if [[ $CURRENT_ATTEMPT -ge $WAIT_ATTEMPTS ]]; then
+                                echo "Failed while waiting for 'issuer' tunnel in ${1}/api/tunnels"
+                                exit 1
+                        fi
+                        echo "Waiting for 'issuer' tunnel..." 1>&2
+                        sleep "$WAIT_INTERVAL" &
+                        wait $!
+                fi
+        done
+}
+
+liveliness_check "${TUNNEL_ENDPOINT}"
 
 # Get the authserver tunnel public URL using jq
 export TENANT_ISSUER_BASE_URL=$(curl --silent "${TUNNEL_ENDPOINT}/api/tunnels" | jq -r '.tunnels[] | select(.name == "authserver") | .public_url')

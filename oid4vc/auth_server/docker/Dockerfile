@@ -20,7 +20,6 @@ COPY alembic/ alembic/
 COPY README.md ./
 
 # Install Python dependencies
-RUN poetry lock
 RUN poetry install --no-interaction --no-ansi --without dev
 
 # Set environment variable for Alembic DB URL (can be overridden at runtime)

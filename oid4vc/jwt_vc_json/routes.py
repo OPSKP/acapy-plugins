@@ -1,4 +1,4 @@
-"""JWT VC extra routes."""
+"""JWT VC JSON extra routes."""
 
 import logging
 from typing import Any, Dict
@@ -18,18 +18,15 @@ from acapy_agent.messaging.models.base import BaseModelError
 from acapy_agent.messaging.models.openapi import OpenAPISchema
 from marshmallow import RAISE, ValidationError, fields
 
-
 from oid4vc.cred_processor import CredProcessors
-
 from oid4vc.models.supported_cred import SupportedCredential, SupportedCredentialSchema
 from oid4vc.routes import SupportedCredentialMatchSchema, supported_cred_is_unique
-
 
 LOGGER = logging.getLogger(__name__)
 
 
 class JwtSupportedCredCreateRequestSchema(OpenAPISchema):
-    """Schema for SupportedCredCreateRequestSchema."""
+    """Schema for creating a JWT VC supported credential."""
 
     format = fields.Str(required=True, metadata={"example": "jwt_vc_json"})
     identifier = fields.Str(
@@ -45,15 +42,13 @@ class JwtSupportedCredCreateRequestSchema(OpenAPISchema):
         required=False,
         metadata={
             "example": {
-                "credential_definition": {
-                    "type": ["VerifiableCredential", "UniversityDegreeCredential"],
-                    "@context": [
-                        "https://www.w3.org/2018/credentials/v1",
-                        "https://www.w3.org/2018/credentials/examples/v1",
-                    ],
-                },
+                "type": ["VerifiableCredential", "UniversityDegreeCredential"],
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://www.w3.org/2018/credentials/examples/v1",
+                ],
             },
-            "description": "List of credential types supported.",
+            "description": "Credential definition with type and context.",
         },
     )
     proof_types_supported = fields.Dict(
@@ -105,10 +100,17 @@ async def supported_credential_create_jwt(request: web.Request):
     profile = context.profile
 
     body: Dict[str, Any] = await request.json()
+    # Backward compat: accept top-level @context/type (old API) alongside
+    # the OID4VCI 1.0 credential_definition wrapping.
+    if "credential_definition" not in body:
+        compat: Dict[str, Any] = {}
+        for key in ("@context", "type", "credentialSubject", "order"):
+            if key in body:
+                compat[key] = body.pop(key)
+        if compat:
+            body["credential_definition"] = compat
     try:
-        body: Dict[str, Any] = JwtSupportedCredCreateRequestSchema().load(
-            body, unknown=RAISE
-        )
+        body = JwtSupportedCredCreateRequestSchema().load(body, unknown=RAISE)
     except ValidationError as err:
         raise web.HTTPBadRequest(reason=str(err.messages)) from err
 
@@ -150,7 +152,6 @@ async def jwt_supported_cred_update_helper(
     session: AskarProfileSession,
 ) -> SupportedCredential:
     """Helper method for updating a JWT Supported Credential Record."""
-
     record.identifier = body["identifier"]
     record.format = body["format"]
     record.cryptographic_binding_methods_supported = body.get(
@@ -167,42 +168,28 @@ async def jwt_supported_cred_update_helper(
     return record
 
 
-class UpdateJwtSupportedCredentialResponseSchema(OpenAPISchema):
-    """Response schema for updating an OID4VP PresDef."""
-
-    supported_cred = fields.Dict(
-        required=True,
-        metadata={"descripton": "The updated Supported Credential"},
-    )
-
-    supported_cred_id = fields.Str(
-        required=True,
-        metadata={
-            "description": "Supported Credential identifier",
-        },
-    )
-
-
 @docs(
     tags=["oid4vci"],
     summary="Update a Supported Credential. "
-    "Expected to be a complete replacement of a JWT Supported Credential record, "
-    "i.e., optional values that aren't supplied will be `None`, rather than retaining "
-    "their original value.",
+    "Expected to be a complete replacement of a JWT Supported Credential record.",
 )
 @match_info_schema(SupportedCredentialMatchSchema())
 @request_schema(JwtSupportedCredCreateRequestSchema())
 @response_schema(SupportedCredentialSchema())
 async def update_supported_credential_jwt_vc(request: web.Request):
     """Update a JWT Supported Credential record."""
-
     context: AdminRequestContext = request["context"]
     supported_cred_id = request.match_info["supported_cred_id"]
     body: Dict[str, Any] = await request.json()
+    if "credential_definition" not in body:
+        compat: Dict[str, Any] = {}
+        for key in ("@context", "type", "credentialSubject", "order"):
+            if key in body:
+                compat[key] = body.pop(key)
+        if compat:
+            body["credential_definition"] = compat
     try:
-        body: Dict[str, Any] = JwtSupportedCredCreateRequestSchema().load(
-            body, unknown=RAISE
-        )
+        body = JwtSupportedCredCreateRequestSchema().load(body, unknown=RAISE)
     except ValidationError as err:
         raise web.HTTPBadRequest(reason=str(err.messages)) from err
 
