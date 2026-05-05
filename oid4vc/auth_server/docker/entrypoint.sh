@@ -17,17 +17,17 @@ done
 # TODO parmaterize the DB admin user and password. Not the same as ADMIN_DB_USER/PASSWORD which are specific to the auth server admin.
 if ! PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" -lqt | cut -d \| -f 1 | grep -qw "$ADMIN_DB_NAME"; then
   echo "Database $ADMIN_DB_NAME does not exist. Running init.sql..."
-  PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" \
-    -v ADMIN_DB_NAME="$ADMIN_DB_NAME" \
-    -v ADMIN_DB_USER="$ADMIN_DB_USER" \
-    -v ADMIN_DB_PASSWORD="${ADMIN_DB_PASSWORD}" \
-    -f alembic/sql/init.sql
+        PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" \
+                -v ADMIN_DB_NAME="$ADMIN_DB_NAME" \
+                -v ADMIN_DB_USER="$ADMIN_DB_USER" \
+                -v ADMIN_DB_PASSWORD="$ADMIN_DB_PASSWORD" \
+                -f alembic/sql/init.sql
 else
-  echo "Database $POSTGRES_DB already exists. Skipping init.sql."
+        echo "Database $ADMIN_DB_NAME already exists. Skipping init.sql."
 fi
 
 # Set Alembic DB URL (use sync driver for migrations)
-export ALEMBIC_DB_URL="postgresql+psycopg://$ADMIN_DB_USER:$ADMIN_DB_PASSWORD@$ADMIN_DB_HOST:5432/$POSTGRES_DB"
+export ALEMBIC_DB_URL="postgresql+psycopg://$ADMIN_DB_USER:$ADMIN_DB_PASSWORD@$ADMIN_DB_HOST:5432/$ADMIN_DB_NAME"
 export ALEMBIC_DB_SCHEMA="admin"
 
 # If these are not unset, they will interfere with the tenant provisioning in the auth server, which also uses Alembic but needs to connect to the tenant DBs with different credentials. 
