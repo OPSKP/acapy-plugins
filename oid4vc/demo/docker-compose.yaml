@@ -101,8 +101,6 @@ services:
         condition: service_started
       auth-server:
         condition: service_healthy
-      auth-server:
-        condition: service_healthy
 
   webhook-listener:
     image: mendhak/http-https-echo:18
