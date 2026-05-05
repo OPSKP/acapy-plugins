@@ -56,7 +56,7 @@ liveliness_check () {
         done
 }
 
-liveliness_check "${TUNNEL_ENDPOINT}"
+# liveliness_check "${TUNNEL_ENDPOINT}"
 
 # Get the authserver tunnel public URL using jq
 export TENANT_ISSUER_BASE_URL=$(curl --silent "${TUNNEL_ENDPOINT}/api/tunnels" | jq -r '.tunnels[] | select(.name == "authserver") | .public_url')
