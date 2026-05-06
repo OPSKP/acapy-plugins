@@ -31,11 +31,11 @@ if ! PGPASSWORD="postgres" psql -h "$ADMIN_DB_HOST" -U "postgres" -lqt | cut -d 
     -v ADMIN_DB_PASSWORD="${ADMIN_DB_PASSWORD}" \
     -f alembic/sql/init.sql
 else
-  echo "Database $POSTGRES_DB already exists. Skipping init.sql."
+  echo "Database $ADMIN_DB_NAME already exists. Skipping init.sql."
 fi
 
 # Set Alembic DB URL (use sync driver for migrations)
-export ALEMBIC_DB_URL="postgresql+psycopg://$ADMIN_DB_USER:$ADMIN_DB_PASSWORD@$ADMIN_DB_HOST:5432/$POSTGRES_DB"
+export ALEMBIC_DB_URL="postgresql+psycopg://$ADMIN_DB_USER:$ADMIN_DB_PASSWORD@$ADMIN_DB_HOST:5432/$ADMIN_DB_NAME"
 export ALEMBIC_DB_SCHEMA="admin"
 
 # If these are not unset, they will interfere with the tenant provisioning in the auth server, which also uses Alembic but needs to connect to the tenant DBs with different credentials. 
