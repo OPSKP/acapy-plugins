@@ -7,6 +7,14 @@ if [ -z "$ADMIN_DB_HOST" ] || [ -z "$ADMIN_DB_USER" ] || [ -z "$ADMIN_DB_PASSWOR
   exit 1
 fi
 
+
+echo "ADMIN_DB_HOST: $ADMIN_DB_HOST"
+echo "ADMIN_DB_USER: $ADMIN_DB_USER"
+echo "ADMIN_DB_PASSWORD: $ADMIN_DB_PASSWORD"
+echo "ADMIN_DB_NAME: $ADMIN_DB_NAME"
+
+env
+
 # Wait for PostgreSQL to be available
 until pg_isready -h "$ADMIN_DB_HOST" -U "postgres"; do
   echo "Waiting for PostgreSQL at $ADMIN_DB_HOST..."
