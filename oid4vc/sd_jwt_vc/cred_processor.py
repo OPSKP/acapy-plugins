@@ -192,7 +192,6 @@ class SdJwtCredIssueProcessor(Issuer, CredVerifier, PresVerifier):
     def validate_credential_subject(self, supported: SupportedCredential, subject: dict):
         """Validate the credential subject."""
         vc_additional = supported.vc_additional_data
-        LOGGER.info("QWERTY Validating credential subject: %s against supported: %s", subject, supported)
         assert vc_additional
         # assert supported.format_data
         claims_metadata = supported.credential_metadata.get("claims")
