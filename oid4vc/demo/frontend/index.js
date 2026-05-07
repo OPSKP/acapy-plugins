@@ -1654,7 +1654,11 @@ app.post("/issue", (req, res, next) => {
     app.post("/webhook/*", (req, res, next) => {
       logger.trace("Webhook received");
       logger.trace(req.path);
-      logger.trace(JSON.stringify(req.body));
+      const reqBody = req.body;
+      // set status_encoded and mask_encoded of reqBody to "" if they exist to avoid logging sensitive information
+      if (reqBody.status_encoded) reqBody.status_encoded = "";
+      if (reqBody.mask_encoded) reqBody.mask_encoded = "";
+      logger.trace(JSON.stringify(reqBody));
       if (req.path == "/webhook/topic/oid4vci/") {
         // If there's no exchange ID, we can't look up the request
         if (!req.body.exchange_id) return;
