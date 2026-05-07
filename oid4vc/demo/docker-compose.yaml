@@ -138,6 +138,7 @@ services:
       ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN
       AUTHSERVER_NGROK_URL: $AUTHSERVER_NGROK_URL
       TENANT_SECRET: tenantsecrettoken #Used by the issuer introspect tokens on auth server.
+    entrypoint: ["/bin/sh", "/wait.sh", "issuer", "3001", "node", "index.js"]
     depends_on:
       issuer:
         condition: service_started

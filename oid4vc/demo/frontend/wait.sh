@@ -7,8 +7,13 @@ host="$1"
 port="$2"
 shift 2
 
-until nc -z "$host" "$port"; do
-  echo "Waiting for $host:$port to be available..."
+# until nc -z "$host" "$port"; do
+#   echo "Waiting for $host:$port to be available..."
+#   sleep 2
+# done
+
+until curl --silent --fail http://$host:$port/; do
+  echo "Waiting for $host:$port..."
   sleep 2
 done
 
