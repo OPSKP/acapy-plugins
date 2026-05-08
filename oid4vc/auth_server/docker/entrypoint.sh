@@ -36,8 +36,8 @@ unset ALEMBIC_DB_SCHEMA
 
 
 # Get the authserver tunnel public URL using jq
-export TENANT_ISSUER_BASE_URL=$(curl --silent "${TUNNEL_ENDPOINT}/api/tunnels" | jq -r '.tunnels[] | select(.name == "authserver") | .public_url')
-echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
+# export TENANT_ISSUER_BASE_URL=$(curl --silent "${TUNNEL_ENDPOINT}/api/tunnels" | jq -r '.tunnels[] | select(.name == "authserver") | .public_url')
+# echo "TENANT_ISSUER_BASE_URL: $TENANT_ISSUER_BASE_URL"
 
 # Run Alembic migrations
 echo $PWD
