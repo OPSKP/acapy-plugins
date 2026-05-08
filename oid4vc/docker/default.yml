@@ -10,8 +10,8 @@ admin-insecure-mode: true
 #admin-api-key: change-me
 
 # Transport
-# inbound-transport:
-#   - [ http, 0.0.0.0, 3000 ]
+inbound-transport:
+  - [ http, 0.0.0.0, 3000 ]
 
 outbound-transport: http
 # endpoint:
