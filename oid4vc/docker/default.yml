@@ -10,12 +10,12 @@ admin-insecure-mode: true
 #admin-api-key: change-me
 
 # Transport
-inbound-transport:
-  - [ http, 0.0.0.0, 3000 ]
-  - [ ws, 0.0.0.0, 3002 ]
+# inbound-transport:
+#   - [ http, 0.0.0.0, 3000 ]
+
 outbound-transport: http
-endpoint:
-  - http://host.docker.internal:3000
+# endpoint:
+#   - http://host.docker.internal:3000
 
 # plugins
 plugin:
