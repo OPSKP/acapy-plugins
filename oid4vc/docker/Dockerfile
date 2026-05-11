@@ -26,12 +26,12 @@ COPY pyproject.toml poetry.lock README.md ./
 RUN poetry install --without dev --all-extras
 
 #build the isomdl library from indicio. Tempory solution until we have a wheel on pypi with linux arm support
-RUN apt-get update && apt-get install -y git build-essential && apt-get clean
-RUN git clone https://github.com/Indicio-tech/isomdl-uniffi.git
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-WORKDIR /usr/src/app/isomdl-uniffi/python
-RUN python build.py
+# RUN apt-get update && apt-get install -y git build-essential && apt-get clean
+# RUN git clone https://github.com/Indicio-tech/isomdl-uniffi.git
+# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# ENV PATH="/root/.cargo/bin:${PATH}"
+# WORKDIR /usr/src/app/isomdl-uniffi/python
+# RUN python build.py
 
 USER $user
 
