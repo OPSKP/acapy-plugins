@@ -129,7 +129,7 @@ services:
     volumes:
       - ./frontend/index.js:/app/index.js:z
       - ./frontend/templates:/app/templates:z
-      - ./frontend/wait.sh:/wait.sh:z
+      - ./frontend/entrypoint.sh:/entrypoint.sh:z
     environment:
       NODE_ENV: development # Set NODE_ENV to 'development'
       WDS_SOCKET_PORT: 0
@@ -138,7 +138,8 @@ services:
       ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN
       AUTHSERVER_NGROK_URL: $AUTHSERVER_NGROK_URL
       TENANT_SECRET: tenantsecrettoken #Used by the issuer introspect tokens on auth server.
-    entrypoint: ["/bin/sh", "/wait.sh", "issuer", "3001", "node", "index.js"]
+      AUTHSERVER_BASE_URL: $AUTHSERVER_BASE_URL
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     depends_on:
       issuer:
         condition: service_started
