@@ -139,6 +139,8 @@ services:
       AUTHSERVER_NGROK_URL: $AUTHSERVER_NGROK_URL
       TENANT_SECRET: tenantsecrettoken #Used by the issuer introspect tokens on auth server.
       AUTHSERVER_BASE_URL: $AUTHSERVER_BASE_URL
+      AUTHSERVER_ADMIN_INTERNAL_URL: $AUTHSERVER_ADMIN_INTERNAL_URL
+      AUTHSERVER_TENANT_INTERNAL_URL: $AUTHSERVER_TENANT_INTERNAL_URL
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     depends_on:
       issuer:

@@ -72,7 +72,11 @@ const presentationCache = new NodeCache({ stdTTL: 300, checkperiod: 400 });
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
 const API_KEY = process.env.API_KEY;
+
+// Auth Server URLs and Tokens (Admin and Tenant)
 const AUTHSERVER_BASE_URL = process.env.AUTHSERVER_BASE_URL;
+const AUTHSERVER_ADMIN_INTERNAL_URL = process.env.AUTHSERVER_ADMIN_INTERNAL_URL || "http://auth-server:9000";
+const AUTHSERVER_TENANT_INTERNAL_URL = process.env.AUTHSERVER_TENANT_INTERNAL_URL || "http://auth-server:9001";
 const ADMIN_MANAGE_AUTH_TOKEN = process.env.ADMIN_MANAGE_AUTH_TOKEN;
 const TENANT_SECRET = process.env.TENANT_SECRET;
 
@@ -1314,14 +1318,15 @@ const WALLET_ID = token.settings["wallet.id"];
 async function initializeAuthServer() {
   try {
  
-    const AUTHSERVER="http://auth-server:9000"
-
+    const AUTHSERVER=AUTHSERVER_ADMIN_INTERNAL_URL;
+    
     const commonHeaders = {
       accept: "application/json",
       "Authorization": "Bearer " + ADMIN_MANAGE_AUTH_TOKEN,
       "Content-Type": "application/json",
     };
 
+    console.log("Initializing Tenant on Auth Server at:", AUTHSERVER);
     // Create tenant
     const tenantRes = await axios.post(
       `${AUTHSERVER}/admin/tenants`,
@@ -1387,7 +1392,7 @@ async function initializeIssuerMetadata() {
       authorization_servers: [
         {
           public_url: `${AUTHSERVER_BASE_URL}/tenants/${WALLET_ID}`,
-          private_url: `http://auth-server:9000/tenants/${WALLET_ID}`,
+          private_url: `${AUTHSERVER_TENANT_INTERNAL_URL}}/tenants/${WALLET_ID}`,
           auth_type: "client_secret_basic",
           client_credentials: {
             client_id: "client1",
