@@ -75,15 +75,12 @@ const API_KEY = process.env.API_KEY;
 const AUTHSERVER_NGROK_URL = process.env.AUTHSERVER_NGROK_URL;
 const ADMIN_MANAGE_AUTH_TOKEN = process.env.ADMIN_MANAGE_AUTH_TOKEN;
 const TENANT_SECRET = process.env.TENANT_SECRET;
-<<<<<<< HEAD
-=======
 
 //certificate and private key to import for mDL issuance
 //expires 2036, private_key is PEM base64 encoded PKCS #8.
 //TODO the certifciate does not work for verification as a trust anchor - IACA extensions are missing.
 const certificate_pem = "-----BEGIN CERTIFICATE-----\nMIIB1DCCAXmgAwIBAgIIdNRHwTfOGwcwCgYIKoZIzj0EAwIwDTELMAkGA1UEBhMC\nQ0EwHhcNMjYwNDEzMTkyNDAwWhcNMzYwNDEzMTkyNDAwWjANMQswCQYDVQQGEwJD\nQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNKdpd24SPAyNLWNd4J/hlEU5awn\nh26s4sQnJ6cy5tzF92eoNCoz/RKeUD2pCUStdJhN3qYnXgnMbDqLlGIt0bmjgcIw\ngb8wEgYDVR0TAQH/BAgwBgEB/wIBADAdBgNVHQ4EFgQUQHLNvJUIYoRcUOiu5qhb\nvaxt4UgwDgYDVR0PAQH/BAQDAgEGMCIGA1UdEgQbMBmGF21haWx0bzp1c2VyQGV4\nYW1wbGUuY29tMCMGA1UdHwQcMBowGKAWoBSGEmh0dHA6Ly9leGFtcGxlLmNvbTAR\nBglghkgBhvhCAQEEBAMCAAcwHgYJYIZIAYb4QgENBBEWD3hjYSBjZXJ0aWZpY2F0\nZTAKBggqhkjOPQQDAgNJADBGAiEA0zfq5zFY1hz9E//K9n/JlcVDZ+WN1bTduq8u\n/MXtoPkCIQCQw3KbsNB9e/2yskidmuJe5CdFK3VvZpw0SC8IsG2H5A==\n-----END CERTIFICATE-----\n";
 const private_key_pem = "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg6Al13xaXxheg2tsc\nIQEdUKWRqaCAdcHCfPxw6+yTufWhRANCAATSnaXduEjwMjS1jXeCf4ZRFOWsJ4du\nrOLEJyenMubcxfdnqDQqM/0SnlA9qQlErXSYTd6mJ14JzGw6i5RiLdG5\n-----END PRIVATE KEY-----\n";
->>>>>>> origin/main
 let jwtVcSupportedCredCreated = false;
 let sdJwtSupportedCredCreated = false;
 let mdocSupportedCredCreated = false;
