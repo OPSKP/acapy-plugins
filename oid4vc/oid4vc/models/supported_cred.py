@@ -69,6 +69,22 @@ class SupportedCredential(BaseRecord):
             kwargs:
                 Keyword arguments to allow generic initialization of the record.
         """
+        # Handle type and @context if they are passed in kwargs (top level in JSON)
+        # by moving them to vc_additional_data
+        if "type" in kwargs:
+            type_val = kwargs.pop("type")
+            if vc_additional_data is None:
+                vc_additional_data = {}
+            if "type" not in vc_additional_data:
+                vc_additional_data["type"] = type_val
+
+        if "@context" in kwargs:
+            context_val = kwargs.pop("@context")
+            if vc_additional_data is None:
+                vc_additional_data = {}
+            if "@context" not in vc_additional_data:
+                vc_additional_data["@context"] = context_val
+
         super().__init__(supported_cred_id, **kwargs)
         self.format = format
         self.identifier = identifier
@@ -111,14 +127,16 @@ class SupportedCredential(BaseRecord):
             )
         }
 
-    def metadata(self) -> dict:
+    def metadata(self, issuer=None) -> dict:
         """Return a representation of this record as issuer metadata.
 
-        To arrive at the structure defined by the specification, it must be
-        derived from this record (the record itself is not exactly aligned with
-        the spec).
+        Builds the format-agnostic base metadata and delegates all
+        format-specific shaping to ``issuer.credential_metadata(base)``.
+        Each credential processor is responsible for lifting its own
+        format fields (e.g. ``vct``, ``doctype``, ``credential_definition``)
+        from the ``format_data`` / ``vc_additional_data`` passthroughs.
         """
-        metadata = {
+        issuer_metadata = {
             prop: value
             for prop in (
                 "display",
@@ -131,43 +149,43 @@ class SupportedCredential(BaseRecord):
             )
             if (value := getattr(self, prop)) is not None
         }
-        # Fallback for deprecated fields
-        if "credential_signing_alg_values_supported" not in metadata:
-            alg_supported = getattr(self, "cryptographic_suites_supported", None)
-            if alg_supported:
-                metadata["credential_signing_alg_values_supported"] = alg_supported
-        if metadata.get("credential_signing_alg_values_supported"):
-            metadata["credential_signing_alg_values_supported"] = [
-                int(value)
-                if isinstance(value, str) and value.lstrip("+-").isdigit()
-                else value
-                for value in metadata["credential_signing_alg_values_supported"]
-            ]
-        if "credential_metadata" not in metadata and (
-            cred_meta := getattr(self, "format_data", None)
-        ):
-            metadata["credential_metadata"] = cred_meta
-            # Check optional claims
-            claims = cred_meta.get("claims", None)
-            if claims is None or claims == []:
-                cred_meta.pop("claims", None)
-            # Check display info
-            if "display" in metadata:
-                for item in metadata["display"]:
-                    if "logo" in item and "url" in item["logo"]:
-                        item["logo"]["uri"] = item["logo"]["url"]
-                        del item["logo"]["url"]
-                    if "background_image" in item and "url" in item["background_image"]:
-                        item["background_image"]["uri"] = item["background_image"]["url"]
-                        del item["background_image"]["url"]
-                cred_meta["display"] = metadata.pop("display")
-        if not metadata.get("credential_metadata", None):
-            metadata.pop("credential_metadata", None)
-        # Add additional VC data if present
-        if self.vc_additional_data:
-            metadata["vc_additional_data"] = self.vc_additional_data
+        alg_supported = issuer_metadata.pop("cryptographic_suites_supported", None)
+        if alg_supported:
+            issuer_metadata["credential_signing_alg_values_supported"] = alg_supported
 
-        return metadata
+        # Askar stores all values as strings; parse integer-string alg IDs back
+        # to ints (e.g. COSE algorithm identifiers "-7" → -7 for mDOC).
+        if issuer_metadata.get("credential_signing_alg_values_supported"):
+            issuer_metadata["credential_signing_alg_values_supported"] = [
+                int(v) if isinstance(v, str) and v.lstrip("+-").isdigit() else v
+                for v in issuer_metadata["credential_signing_alg_values_supported"]
+            ]
+
+        # NOTE: Do NOT add "id" here — per OID4VCI spec §11.2.3, the credential
+        # configuration identifier is ONLY the map key in
+        # credential_configurations_supported, never a field inside the object.
+        # Adding it here causes "Found invalid entries" in OIDF conformance tests.
+
+        # Pass format-specific storage fields through so processors can lift them.
+        if self.format_data:
+            issuer_metadata["format_data"] = self.format_data
+        if self.vc_additional_data:
+            issuer_metadata["vc_additional_data"] = self.vc_additional_data
+
+        # Delegate all format-specific shaping to the processor.
+        if issuer is not None and hasattr(issuer, "credential_metadata"):
+            return issuer.credential_metadata(issuer_metadata)
+
+        # Fallback for formats without a registered processor: promote
+        # format_data → credential_metadata (legacy compat) and surface
+        # vc_additional_data as a passthrough key.
+        if "credential_metadata" not in issuer_metadata and self.format_data:
+            issuer_metadata["credential_metadata"] = self.format_data
+        issuer_metadata.pop("format_data", None)
+        return issuer_metadata
+
+    # Keep the old name as an alias for call-sites that were written before the rename.
+    to_issuer_metadata = metadata
 
 
 class SupportedCredentialSchema(BaseRecordSchema):

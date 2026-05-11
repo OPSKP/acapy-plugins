@@ -3,9 +3,21 @@ tunnels:
   issuer:
     proto: http
     addr: issuer:8082
+<<<<<<< HEAD
   authserver:
     proto: http
     addr: auth-server:9001
   demo:
     proto: http
     addr: demo-app:3000
+=======
+    # domain: your-custom-domain
+  authserver:
+    proto: http
+    addr: auth-server:9001
+    # domain: your-custom-domain
+  demo:
+    proto: http
+    addr: demo-app:3000
+    # domain: your-custom-domain
+>>>>>>> origin/main

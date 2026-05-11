@@ -1,10 +1,21 @@
 # OpenID4VCI Plugin for ACA-Py
 
-This plugin implements [OpenID4VCI v1.0][oid4vci].
+This plugin implements [OpenID4VCI 1.0][oid4vci]. This implementation follows the OpenID4VCI 1.0 final specification and is not backwards compatible with earlier drafts.
 
-> [!WARNING]
-> This plugin is under active development.
-> Treat it as experimental; endpoints and records may change as implementation details evolve.
+## Developer Documentation
+
+| Document | Description |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Prerequisites, installation, configuration, Docker quick-start |
+| [Architecture](docs/architecture.md) | Two-server design, plugin lifecycle, credential format registry |
+| [Admin API Reference](docs/admin-api-reference.md) | All `/oid4vci/*`, `/oid4vp/*`, `/mso_mdoc/*`, `/did/*` endpoints |
+| [Public API Reference](docs/public-api-reference.md) | OID4VCI/OID4VP wallet-facing endpoints |
+| [Issuance Cookbook](docs/cookbook-issuance.md) | Step-by-step curl examples for `jwt_vc_json`, `sd_jwt_vc`, `mso_mdoc` |
+| [Verification Cookbook](docs/cookbook-verification.md) | PEX and DCQL-based VP flows with curl examples |
+| [Credential Formats](docs/credential-formats.md) | Format-specific schema details, selective disclosure, mDOC namespaces |
+| [Troubleshooting](docs/troubleshooting.md) | Error codes, common failures, debugging tips |
+
+The plugin's admin endpoints appear automatically in the ACA-Py Swagger UI at `http://<admin-host>:<admin-port>/api/doc` under the `oid4vci`, `oid4vp`, `mso_mdoc`, and `did` tag groups.
 
 ## OpenID4VCI Plugin Demo with Sphereon Wallet
 
@@ -33,7 +44,7 @@ docker-compose down -v  # Clean up
 If you're using Apple Silicon, you may have to separately build the image with the appropriate platform flag (from the `demo` directory):
 
 ```sh
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -f ../docker/Dockerfile --tag oid4vc ..
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -f docker/Dockerfile --tag oid4vc ../..
 ```
 
 ### Demo Flow
@@ -80,7 +91,7 @@ Documentation for the [Status List Plugin] (https://github.com/openwallet-founda
 ```
      OID4VCI_STATUS_HANDLER: status_list.v1_0.status_handler
      STATUS_LIST_SIZE: 131072
-     STATUS_LIST_SHARD_SIZE: 131072
+     STATUS_LIST_SHARD_SIZE: 1024
      STATUS_LIST_PUBLIC_URI: https://localhost:8082/tenant/{tenant_id}/status/{list_number}
      STATUS_LIST_FILE_PATH: /tmp/bitstring/{tenant_id}/{list_number}
 ```
@@ -94,8 +105,8 @@ Documentation for the [Status List Plugin] (https://github.com/openwallet-founda
 ```
       {
         "issuer_did": "did....",
+        "list_type": "w3c",
         "list_size": 131072,
-        "list_type": "ietf",
         "shard_size": 1024,
         "status_message": [
           {
@@ -107,7 +118,7 @@ Documentation for the [Status List Plugin] (https://github.com/openwallet-founda
             "message": "revoked"
           },
         ],
-        "status_purpose": "revocation",
+        "status_purpose": "message",
         "status_size": 1,
         "supported_cred_id": "string",
         "verification_method": "did...."
@@ -244,10 +255,33 @@ The Plugin expects the following configuration options. These options can either
   - `credential_issuer` endpoint, seen in the Credential Offer
 - `OID4VCI_CRED_HANDLER` or `oid4vci.cred_handler`
   - Dict of credential handlers. e.g. `{"jwt_vc_json": "jwt_vc_json"}`
-- `OID4VCI_AUTH_SERVER_URL` or `oid4vci.auth_server_url`
-  - Optional authorization server URL
-- `OID4VCI_AUTH_SERVER_CLIENT` or `oid4vci.auth_server_client`
-  - Optional authorization server client credential, e.g. `{"auth_type": "client_secret_basic", "client_id": "client_id", "client_secret": "client_secret"}`
+
+#### Authorization Server (Per-Tenant)
+
+Authorization server configuration is managed per-tenant via the `IssuerConfiguration` record, not through global environment variables. Use the admin API:
+
+- `PUT /oid4vci/issuer/configuration` — create or update the issuer configuration
+- `GET /oid4vci/issuer/configuration` — retrieve the current configuration
+
+Example payload to configure an external authorization server:
+
+```json
+{
+  "authorization_servers": [
+    {
+      "public_url": "https://auth.example.com/tenant/abc123",
+      "private_url": "https://auth-internal:8080/tenant/abc123",
+      "auth_type": "client_secret_basic",
+      "client_credentials": {
+        "client_id": "issuer-client",
+        "client_secret": "secret"
+      }
+    }
+  ]
+}
+```
+
+Supported `auth_type` values: `client_secret_basic`, `client_secret_jwt`, `private_key_jwt`.
 
 ### Creating Supported Credential Records
 
@@ -371,20 +405,29 @@ When the Controller sets up a Supported Credential record using the Admin API, t
 This project is managed using Poetry. To get started:
 
 ```shell
-poetry install
+poetry install --all-extras
 poetry run pre-commit install
 poetry run pre-commit install --hook-type commit-msg
 ```
 
-> TODO: Pre-commit should move to the repo root
+#### Installing mso_mdoc Dependencies (Optional)
+
+The `mso_mdoc` module requires the `isomdl-uniffi` library, which needs Rust to compile. 
+
+**⚠️ Note**: Automated installation through Poetry/pip doesn't currently work due to build system limitations.
+
+For manual installation instructions, see [mso_mdoc/README.md](mso_mdoc/README.md).
 
 ### Unit Tests
 
 To run unit tests:
 
 ```shell
-# Run only unit tests; leaving off the directory will attempt to run integration tests
-poetry run pytest tests/
+# Run all tests except mso_mdoc (which requires isomdl-uniffi)
+poetry run pytest jwt_vc_json/tests/ oid4vc/tests/ sd_jwt_vc/tests/
+
+# Or run all tests including mso_mdoc (requires isomdl-uniffi installed)
+poetry run pytest
 ```
 
 ### Integration Tests
@@ -405,6 +448,29 @@ docker compose down -v  # Clean up
 ```
 
 For Apple Silicon, the `DOCKER_DEFAULT_PLATFORM=linux/amd64` environment variable will be required.
+
+## Development Setup
+
+After cloning the repo and installing dependencies with `poetry install --all-extras`, you must install the `isomdl-uniffi` package separately. It provides the Rust-based ISO 18013-5 mDoc signing bindings and is not on PyPI — only pre-built wheels are available from GitHub releases.
+
+Pick the wheel for your platform:
+
+**macOS (Apple Silicon):**
+```bash
+poetry run pip install https://github.com/Indicio-tech/isomdl-uniffi/releases/download/v0.1.0-indicio.1/isomdl_uniffi-0.1.0-py3-none-macosx_11_0_arm64.whl
+```
+
+**macOS (Intel):**
+```bash
+poetry run pip install https://github.com/Indicio-tech/isomdl-uniffi/releases/download/v0.1.0-indicio.1/isomdl_uniffi-0.1.0-py3-none-macosx_10_12_x86_64.whl
+```
+
+**Linux (x86_64):**
+```bash
+poetry run pip install https://github.com/Indicio-tech/isomdl-uniffi/releases/download/v0.1.0-indicio.1/isomdl_uniffi-0.1.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+```
+
+Without this, importing `mso_mdoc` will fail with `ModuleNotFoundError: No module named 'isomdl_uniffi'`.
 
 ## Not Implemented
 
