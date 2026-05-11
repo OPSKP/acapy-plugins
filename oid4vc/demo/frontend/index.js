@@ -72,7 +72,7 @@ const presentationCache = new NodeCache({ stdTTL: 300, checkperiod: 400 });
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
 const API_KEY = process.env.API_KEY;
-const AUTHSERVER_NGROK_URL = process.env.AUTHSERVER_NGROK_URL;
+const AUTHSERVER_BASE_URL = process.env.AUTHSERVER_BASE_URL;
 const ADMIN_MANAGE_AUTH_TOKEN = process.env.ADMIN_MANAGE_AUTH_TOKEN;
 const TENANT_SECRET = process.env.TENANT_SECRET;
 
@@ -1386,8 +1386,8 @@ async function initializeIssuerMetadata() {
     const payload = {
       authorization_servers: [
         {
-          public_url: `${AUTHSERVER_NGROK_URL}/tenants/${WALLET_ID}`,
-          private_url: `http://auth-server:9001/tenants/${WALLET_ID}`,
+          public_url: `${AUTHSERVER_BASE_URL}/tenants/${WALLET_ID}`,
+          private_url: `http://auth-server:9000/tenants/${WALLET_ID}`,
           auth_type: "client_secret_basic",
           client_credentials: {
             client_id: "client1",
