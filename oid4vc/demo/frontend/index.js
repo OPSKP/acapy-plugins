@@ -659,109 +659,20 @@ async function issue_mdoc_credential(req, res) {
       format: "mso_mdoc",
       id: "org.iso.18013.5.1.mDL",
       doctype: "org.iso.18013.5.1.mDL",
-<<<<<<< HEAD
-      cryptographic_binding_methods_supported: ["jwk"],
-      credential_signing_alg_values_supported: [
-        "-7",
-        "-8"
-=======
       signing_key_id: mdocKeyId,
       cryptographic_binding_methods_supported: ["jwk"],
       credential_signing_alg_values_supported: [
         "ES256"
->>>>>>> origin/main
       ],
       proof_types_supported: {
         jwt: {
           proof_signing_alg_values_supported: [
-<<<<<<< HEAD
-            "ES256",
-            "EdDSA"
-=======
             "ES256"
->>>>>>> origin/main
           ]
         }
       },
       "credential_metadata": {
         claims: [
-<<<<<<< HEAD
-          { 
-            path: [ "org.iso.18013.5.1", "given_name"],
-            display: [
-              {
-                name: "Given Name",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "family_name"],
-            display: [
-              {
-                name: "Family Name",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "birth_date"],
-            display: [
-              {
-                name: "Birth Date",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "issue_date"],
-            display: [
-              {
-                name: "Issue Date",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "expiry_date"],
-            display: [
-              {
-                name: "Expiry Date",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "issuing_authority"],
-            display: [
-              {
-                name: "Issuing Authority",
-                locale: "en-US",
-              }
-            ]
-          },
-          {
-            path: ["org.iso.18013.5.1", "document_number"],
-            display: [
-              {
-                name: "Document Number",
-                locale: "en-US",
-              }
-            ]
-          }
-        ],
-        display: [
-          {
-            name: "Sample Driving License",
-            locale: "en-US",
-            background_image: {
-              uri: "data:image/png;base64,iVBORw0KGgoAAAANS",
-              alt_text: "Driver's License Background"
-            }
-          }
-        ],
-      }   
-=======
           { path: ["org.iso.18013.5.1", "given_name"], display: [{ name: "Given Name", locale: "en-US" }] },
           { path: ["org.iso.18013.5.1", "family_name"], display: [{ name: "Family Name", locale: "en-US" }] },
           { path: ["org.iso.18013.5.1", "birth_date"], display: [{ name: "Birth Date", locale: "en-US" }] },
@@ -784,7 +695,6 @@ async function issue_mdoc_credential(req, res) {
           }
         ],
       },
->>>>>>> origin/main
     }),
   };
 
@@ -1477,11 +1387,7 @@ async function initializeIssuerMetadata() {
       authorization_servers: [
         {
           public_url: `${AUTHSERVER_NGROK_URL}/tenants/${WALLET_ID}`,
-<<<<<<< HEAD
-          private_url: `http://auth-server:9000/tenants/${WALLET_ID}`,
-=======
           private_url: `http://auth-server:9001/tenants/${WALLET_ID}`,
->>>>>>> origin/main
           auth_type: "client_secret_basic",
           client_credentials: {
             client_id: "client1",
@@ -1530,12 +1436,6 @@ async function initializeSigningDid() {
   }
 }
 
-<<<<<<< HEAD
-await initializeAuthServer();
-await initializeIssuerMetadata();
-await initializeSigningDid();
-
-=======
 // Import Certificate and private key.
 let mdocKeyId = null;
 async function initializeMdocSigningKey() {
@@ -1583,7 +1483,6 @@ await initializeAuthServer();
 await initializeIssuerMetadata();
 await initializeSigningDid();
 await initializeMdocSigningKey();
->>>>>>> origin/main
 
 
 // Credential Info route
