@@ -1,0 +1,95 @@
+{
+  "realm": "oid4vc-demo",
+  "enabled": true,
+  "verifiableCredentialsEnabled": true,
+  "attributes": {
+    "oid4vc.pre-authorized-code-lifespan": "300"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "credential-offer-create",
+        "description": "Allows creating credential offers via OID4VCI"
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "UniversityDegreeCredential",
+      "protocol": "oid4vc",
+      "attributes": {
+        "vc.format": "jwt_vc_json",
+        "vc.credential_configuration_id": "UniversityDegreeCredential",
+        "vc.expiry_in_seconds": "31536000"
+      }
+    },
+    {
+      "name": "IDCard",
+      "protocol": "oid4vc",
+      "attributes": {
+        "vc.format": "vc+sd-jwt",
+        "vc.vct": "ExampleIDCard",
+        "vc.credential_configuration_id": "IDCard",
+        "vc.expiry_in_seconds": "31536000"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "acapy-issuer",
+      "name": "ACA-Py Credential Issuer",
+      "description": "Client for ACA-Py to create credential offers and introspect tokens",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "secret": "acapy-issuer-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "attributes": {
+        "oid4vci.enabled": "true"
+      },
+      "optionalClientScopes": ["IDCard", "UniversityDegreeCredential"],
+      "protocolMappers": [
+        {
+          "name": "acapy-issuer-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "acapy-issuer",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-acapy-issuer",
+      "enabled": true,
+      "serviceAccountClientId": "acapy-issuer",
+      "realmRoles": ["credential-offer-create"],
+      "clientRoles": {
+        "realm-management": ["manage-clients", "view-clients"]
+      }
+    },
+    {
+      "username": "demo-user",
+      "enabled": true,
+      "email": "demo@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "realmRoles": ["credential-offer-create"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

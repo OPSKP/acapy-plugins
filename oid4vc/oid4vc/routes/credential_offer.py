@@ -93,7 +93,7 @@ async def get_cred_offer(request: web.BaseRequest):
     exchange_id = request.query["exchange_id"]
 
     offer = await _parse_cred_offer(context, exchange_id)
-    offer_uri = quote(json.dumps(offer))
+    offer_uri = quote(json.dumps(offer), safe='')
     offer_response = {
         "offer": offer,
         "credential_offer": f"openid-credential-offer://?credential_offer={offer_uri}",
@@ -131,6 +131,6 @@ async def get_cred_offer_by_ref(request: web.BaseRequest):
     )
     offer_response = {
         "offer": offer,
-        "credential_offer_uri": f"openid-credential-offer://?credential_offer={quote(ref_uri)}",
+        "credential_offer_uri": f"openid-credential-offer://?credential_offer_uri={quote(ref_uri, safe='')}",
     }
     return web.json_response(offer_response)

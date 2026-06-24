@@ -29,6 +29,8 @@ from marshmallow import RAISE, ValidationError, fields
 from oid4vc.cred_processor import CredProcessors
 from oid4vc.models.supported_cred import SupportedCredential, SupportedCredentialSchema
 from oid4vc.routes import SupportedCredentialMatchSchema, supported_cred_is_unique
+from oid4vc.routes.helpers import ensure_keycloak_scope
+from oid4vc.utils import get_first_auth_server
 from . import trust_anchor_routes
 
 LOGGER = logging.getLogger(__name__)
@@ -256,6 +258,14 @@ async def supported_credential_create_mdoc(request: web.Request):
 
     async with profile.session() as session:
         await record.save(session, reason="Save credential supported record.")
+
+    async with profile.session() as session:
+        auth_server = await get_first_auth_server(session, profile)
+    if auth_server and auth_server.get("auth_type") == "keycloak":
+        try:
+            await ensure_keycloak_scope(profile, record, auth_server)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Keycloak scope sync failed: %s", exc)
 
     return web.json_response(record.serialize())
 

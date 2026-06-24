@@ -1,9 +1,8 @@
 """Credential issuance endpoints for OID4VCI."""
 
+import json
 import logging
 from typing import List, Optional
-from urllib.parse import quote
-import json
 
 from acapy_agent.admin.request_context import AdminRequestContext
 from acapy_agent.messaging.models.base import BaseModelError
@@ -54,12 +53,7 @@ async def dereference_cred_offer(request: web.BaseRequest):
     exchange_id = request.query["exchange_id"]
 
     offer = await _parse_cred_offer(context, exchange_id)
-    return web.json_response(
-        {
-            "offer": offer,
-            "credential_offer": f"openid-credential-offer://?credential_offer={quote(json.dumps(offer))}",
-        }
-    )
+    return web.json_response(offer)
 
 
 def types_are_subset(request: Optional[List[str]], supported: Optional[List[str]]):
@@ -110,9 +104,25 @@ async def issue_cred(request: web.Request):
     Supports both credential_identifier (OID4VCI 1.0) and format (draft spec).
     """
     context: AdminRequestContext = request["context"]
+    # Reconstruct the public URI from X-Forwarded-* headers (set by ngrok/proxy)
+    # so the DPoP htu claim — which uses the wallet-facing URL — matches.
+    proto = request.headers.get("X-Forwarded-Proto", request.url.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.url.host)
+    public_uri = f"{proto}://{host}{request.path}"
     # check_token raises HTTPUnauthorized on auth failures — propagate as-is.
-    token_result = await check_token(context, request.headers.get("Authorization"))
-    refresh_id = token_result.payload["sub"]
+    token_result = await check_token(
+        context,
+        request.headers.get("Authorization"),
+        dpop_proof=request.headers.get("DPoP"),
+        request_method=request.method,
+        request_uri=public_uri,
+    )
+    # For Keycloak tokens, use credentials_offer_id from authorization_details —
+    # it is unique per exchange, whereas sub (user UUID) is shared across all
+    # offers for the same user and would cause ambiguous lookups on refresh flows.
+    auth_details = token_result.payload.get("authorization_details", [])
+    kc_offer_id = auth_details[0].get("credentials_offer_id") if auth_details else None
+    refresh_id = kc_offer_id or token_result.payload["sub"]
     req_body = await request.json()
     LOGGER.info("request: %s", req_body)
 

@@ -1,12 +1,20 @@
 """Token endpoint for OID4VCI."""
 
+import base64 as _base64
 import datetime
+import hashlib as _hashlib
 import hmac
 import json
 import time
 from datetime import UTC
 from typing import Any, Dict
 from urllib.parse import urlparse
+
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.primitives import hashes as _hashes
+from cryptography.hazmat.primitives.asymmetric import ec as _ec
+from cryptography.hazmat.primitives.asymmetric import padding as _padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers as _RSAPublicNumbers
 
 from acapy_agent.admin.request_context import AdminRequestContext
 from acapy_agent.core.profile import Profile
@@ -211,19 +219,216 @@ async def token(request: web.Request):
     )
 
 
+def _b64url_to_int(b64url: str) -> int:
+    padded = b64url + "=" * (4 - len(b64url) % 4)
+    return int.from_bytes(_base64.urlsafe_b64decode(padded), "big")
+
+
+def _verify_sig_with_jwk(
+    signing_input: bytes,
+    sig: bytes,
+    jwk: dict,
+    alg: str,
+) -> None:
+    """Verify a JWT or DPoP proof signature using a JWK.
+
+    Raises web.HTTPUnauthorized on failure.
+    """
+    kty = jwk.get("kty", "")
+    try:
+        if kty == "RSA":
+            pub_key = _RSAPublicNumbers(
+                e=_b64url_to_int(jwk["e"]),
+                n=_b64url_to_int(jwk["n"]),
+            ).public_key()
+            h = {
+                "RS256": _hashes.SHA256(), "RS384": _hashes.SHA384(), "RS512": _hashes.SHA512(),
+                "PS256": _hashes.SHA256(), "PS384": _hashes.SHA384(), "PS512": _hashes.SHA512(),
+            }.get(alg, _hashes.SHA256())
+            pad = (
+                _padding.PSS(mgf=_padding.MGF1(h), salt_length=_padding.PSS.MAX_LENGTH)
+                if alg.startswith("PS") else _padding.PKCS1v15()
+            )
+            pub_key.verify(sig, signing_input, pad, h)
+
+        elif kty == "EC":
+            curve = {
+                "P-256": _ec.SECP256R1(), "P-384": _ec.SECP384R1(), "P-521": _ec.SECP521R1(),
+            }.get(jwk.get("crv", "P-256"), _ec.SECP256R1())
+            pub_key = _ec.EllipticCurvePublicKey.from_encoded_point(
+                curve,
+                b"\x04"
+                + _base64.urlsafe_b64decode(jwk["x"] + "==")
+                + _base64.urlsafe_b64decode(jwk["y"] + "=="),
+            )
+            h = {"ES256": _hashes.SHA256(), "ES384": _hashes.SHA384(), "ES512": _hashes.SHA512()}.get(
+                alg, _hashes.SHA256()
+            )
+            pub_key.verify(sig, signing_input, _ec.ECDSA(h))
+
+        elif kty == "OKP":
+            askar_key = Key.from_jwk(json.dumps(jwk))
+            if not askar_key.verify_signature(signing_input, sig, sig_type=alg):
+                raise _InvalidSignature
+
+        else:
+            raise web.HTTPUnauthorized(reason=f"Unsupported key type: {kty}")
+
+    except _InvalidSignature:
+        raise web.HTTPUnauthorized(reason="Invalid signature")
+    except web.HTTPUnauthorized:
+        raise
+    except Exception as exc:
+        raise web.HTTPUnauthorized(reason=f"Signature verification failed: {exc}")
+
+
+def _jwk_thumbprint(jwk: dict) -> str:
+    """Compute JWK thumbprint per RFC 7638 (SHA-256, base64url)."""
+    kty = jwk.get("kty")
+    members: list[str]
+    if kty == "EC":
+        members = ["crv", "kty", "x", "y"]
+    elif kty == "RSA":
+        members = ["e", "kty", "n"]
+    elif kty == "OKP":
+        members = ["crv", "kty", "x"]
+    else:
+        raise ValueError(f"Unsupported kty for thumbprint: {kty}")
+    canonical = json.dumps({k: jwk[k] for k in sorted(members)}, separators=(",", ":"))
+    digest = _hashlib.sha256(canonical.encode()).digest()
+    return _base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def _validate_dpop(
+    proof_jwt: str,
+    access_token: str,
+    request_method: str,
+    request_uri: str,
+    max_age: int = 300,
+) -> None:
+    """Validate a DPoP proof JWT per RFC 9449 §4.3.
+
+    Checks: typ, alg, htm, htu, iat freshness, ath (access token hash),
+    and proof signature. jti replay protection is not implemented here.
+    """
+    parts = proof_jwt.split(".")
+    if len(parts) != 3:
+        raise web.HTTPUnauthorized(reason="Malformed DPoP proof")
+    h_b64, p_b64, s_b64 = parts
+    try:
+        proof_header = b64_to_dict(h_b64)
+        proof_payload = b64_to_dict(p_b64)
+    except Exception:
+        raise web.HTTPUnauthorized(reason="Invalid DPoP proof JWT encoding")
+
+    if proof_header.get("typ") != "dpop+jwt":
+        raise web.HTTPUnauthorized(reason="DPoP proof typ must be 'dpop+jwt'")
+    alg = proof_header.get("alg", "")
+    if not alg or alg == "none":
+        raise web.HTTPUnauthorized(reason="DPoP proof missing valid alg")
+    jwk = proof_header.get("jwk")
+    if not jwk:
+        raise web.HTTPUnauthorized(reason="DPoP proof header missing jwk")
+
+    if proof_payload.get("htm", "").upper() != request_method.upper():
+        raise web.HTTPUnauthorized(
+            reason=f"DPoP htm mismatch: got {proof_payload.get('htm')!r}, expected {request_method!r}"
+        )
+
+    def _bare(uri: str) -> str:
+        p = urlparse(uri)
+        return f"{p.scheme}://{p.netloc}{p.path}"
+
+    if _bare(proof_payload.get("htu", "")) != _bare(request_uri):
+        raise web.HTTPUnauthorized(
+            reason=f"DPoP htu mismatch: got {proof_payload.get('htu')!r}, expected {request_uri!r}"
+        )
+
+    if abs(time.time() - proof_payload.get("iat", 0)) > max_age:
+        raise web.HTTPUnauthorized(reason="DPoP proof iat outside acceptable window")
+
+    # ath: SHA-256 of the ASCII access token per RFC 9449 §4.2
+    ath = proof_payload.get("ath")
+    if ath:
+        expected_ath = (
+            _base64.urlsafe_b64encode(
+                _hashlib.sha256(access_token.encode()).digest()
+            )
+            .rstrip(b"=")
+            .decode()
+        )
+        if ath != expected_ath:
+            raise web.HTTPUnauthorized(reason="DPoP ath does not match access token hash")
+
+    _verify_sig_with_jwk(
+        f"{h_b64}.{p_b64}".encode(),
+        b64_to_bytes(s_b64, urlsafe=True),
+        jwk,
+        alg,
+    )
+
+
+async def _verify_keycloak_jwt(token: str, auth_server: dict) -> JWTVerifyResult:
+    """Validate a Keycloak-issued JWT locally using Keycloak's JWKS endpoint.
+
+    Keycloak OID4VCI DPoP tokens have aud set to Keycloak's own credential
+    endpoint, making introspection by acapy-issuer fail the audience check.
+    Local JWKS validation avoids that restriction.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise web.HTTPUnauthorized()
+    header_b64, payload_b64, sig_b64 = parts
+    try:
+        header = b64_to_dict(header_b64)
+        payload = b64_to_dict(payload_b64)
+    except Exception:
+        raise web.HTTPUnauthorized()
+
+    kid = header.get("kid")
+    alg = header.get("alg", "")
+
+    private_url = get_auth_server_url(auth_server)
+    jwks_resp = await AppResources.get_http_client().get(
+        f"{private_url}/protocol/openid-connect/certs"
+    )
+    if jwks_resp.status != 200:
+        raise web.HTTPUnauthorized(reason="Could not fetch Keycloak JWKS")
+    jwks = await jwks_resp.json()
+
+    key_data = next(
+        (k for k in jwks.get("keys", []) if k.get("kid") == kid),
+        None,
+    )
+    if not key_data:
+        raise web.HTTPUnauthorized(reason="Signing key not found in JWKS")
+
+    _verify_sig_with_jwk(
+        f"{header_b64}.{payload_b64}".encode(),
+        b64_to_bytes(sig_b64, urlsafe=True),
+        key_data,
+        alg,
+    )
+
+    if payload.get("exp", 0) < time.time():
+        raise web.HTTPUnauthorized(reason="Token expired")
+
+    return JWTVerifyResult(headers=header, payload=payload, verified=True)
+
+
 async def check_token(
     context: AdminRequestContext,
     bearer: str | None = None,
+    dpop_proof: str | None = None,
+    request_method: str = "POST",
+    request_uri: str = "",
 ) -> JWTVerifyResult:
-    """Validate the OID4VCI token.
+    """Validate the OID4VCI access token per RFC 9449.
 
-    Accepts both ``Bearer`` and ``DPoP`` Authorization schemes.  When
-    ``dpop_signing_alg_values_supported`` is advertised in the server
-    metadata, DPoP-capable clients (e.g. Credo 0.6.x) will present an
-    ``Authorization: DPoP <token>`` header.  We accept and verify the
-    access-token JWT in both cases; the DPoP proof itself is not
-    cryptographically validated here (full DPoP binding per RFC 9449 is
-    not yet implemented).
+    Accepts both ``Bearer`` and ``DPoP`` Authorization schemes.  When the
+    scheme is ``DPoP``, the DPoP proof JWT is validated (htm, htu, iat,
+    ath, signature) and the token's ``cnf.jkt`` binding is verified against
+    the proof's embedded public key.
     """
     if not bearer:
         raise web.HTTPUnauthorized()
@@ -233,11 +438,6 @@ async def check_token(
         raise web.HTTPUnauthorized() from None
     if scheme.lower() not in ("bearer", "dpop"):
         raise web.HTTPUnauthorized()
-    # NOTE: When scheme is "dpop", the DPoP proof in the DPoP HTTP header is NOT
-    # verified (RFC 9449 §4.3).  We advertise dpop_signing_alg_values_supported
-    # in AS metadata (required by HAIP DPOP-5.1), so wallets such as Credo may
-    # present DPoP-bound tokens.  Accepting without proof verification is a
-    # temporary compatibility measure; full DPoP support is tracked separately.
 
     config = Config.from_settings(context.settings)
     profile = context.profile
@@ -246,38 +446,57 @@ async def check_token(
         auth_server = await get_first_auth_server(session, profile)
 
     if auth_server:
+        auth_type = auth_server.get("auth_type", "")
         private_url = get_auth_server_url(auth_server)
-        subpath = get_tenant_subpath(profile, tenant_prefix="/tenant")
-        issuer_server_url = f"{config.endpoint}{subpath}"
-        introspect_endpoint = f"{private_url}/introspect"
-        auth_header = await get_auth_header(
-            profile, auth_server, issuer_server_url, introspect_endpoint
-        )
-        resp = await AppResources.get_http_client().post(
-            introspect_endpoint,
-            data={"token": cred},
-            headers={"Authorization": auth_header},
-        )
-        introspect = await resp.json()
-        if not introspect.get("active"):
-            raise web.HTTPUnauthorized(reason="invalid_token")
+        if auth_type == "keycloak":
+            result = await _verify_keycloak_jwt(cred, auth_server)
         else:
+            subpath = get_tenant_subpath(profile, tenant_prefix="/tenant")
+            issuer_server_url = f"{config.endpoint}{subpath}"
+            introspect_endpoint = f"{private_url}/introspect"
+            auth_header = await get_auth_header(
+                profile, auth_server, issuer_server_url, introspect_endpoint
+            )
+            resp = await AppResources.get_http_client().post(
+                introspect_endpoint,
+                data={"token": cred},
+                headers={"Authorization": auth_header},
+            )
+            introspect = await resp.json()
+            if not introspect.get("active"):
+                raise web.HTTPUnauthorized(reason="invalid_token")
             result = JWTVerifyResult(headers={}, payload=introspect, verified=True)
-            return result
+    else:
+        result = await jwt_verify(context.profile, cred)
+        if not result.verified:
+            raise web.HTTPUnauthorized(
+                text='{"error": "invalid_token", '
+                '"error_description": "Token verification failed"}',
+                headers={"Content-Type": "application/json"},
+            )
+        if result.payload["exp"] < datetime.datetime.now(UTC).timestamp():
+            raise web.HTTPUnauthorized(
+                text='{"error": "invalid_token", "error_description": "Token expired"}',
+                headers={"Content-Type": "application/json"},
+            )
 
-    result = await jwt_verify(context.profile, cred)
-    if not result.verified:
-        raise web.HTTPUnauthorized(
-            text='{"error": "invalid_token", '
-            '"error_description": "Token verification failed"}',
-            headers={"Content-Type": "application/json"},
-        )
-
-    if result.payload["exp"] < datetime.datetime.now(UTC).timestamp():
-        raise web.HTTPUnauthorized(
-            text='{"error": "invalid_token", "error_description": "Token expired"}',
-            headers={"Content-Type": "application/json"},
-        )
+    # DPoP binding validation per RFC 9449 §7
+    if scheme.lower() == "dpop":
+        if not dpop_proof:
+            raise web.HTTPUnauthorized(reason="DPoP scheme requires DPoP proof header")
+        _validate_dpop(dpop_proof, cred, request_method, request_uri)
+        cnf = result.payload.get("cnf", {})
+        jkt = cnf.get("jkt")
+        if jkt:
+            try:
+                proof_header = b64_to_dict(dpop_proof.split(".")[0])
+                jwk = proof_header.get("jwk", {})
+                if _jwk_thumbprint(jwk) != jkt:
+                    raise web.HTTPUnauthorized(reason="DPoP cnf.jkt does not match proof key")
+            except web.HTTPUnauthorized:
+                raise
+            except Exception as exc:
+                raise web.HTTPUnauthorized(reason=f"DPoP cnf.jkt check failed: {exc}")
 
     return result
 

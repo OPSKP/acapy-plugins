@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import hmac as _hmac
 import json
+from os import getenv
 from typing import Dict, Optional
 
 from acapy_agent.core.profile import Profile, ProfileSession
@@ -43,10 +44,9 @@ async def get_first_auth_server(
 ) -> Optional[dict]:
     """Return the first authorization_server entry from IssuerConfiguration.
 
-    Returns None if no IssuerConfiguration exists for the current wallet or
-    no authorization_servers are configured.
+    Falls back to OID4VCI_AUTH_SERVER_* environment variables when no
+    database configuration exists for the current wallet.
     """
-
     wallet_id = get_wallet_id(profile)
     try:
         issuer_config = await IssuerConfiguration.retrieve_by_id(session, wallet_id)
@@ -54,6 +54,24 @@ async def get_first_auth_server(
             return issuer_config.authorization_servers[0]
     except StorageNotFoundError:
         pass
+
+    # Fallback: bootstrap from OID4VCI_AUTH_SERVER_* environment variables
+    auth_server_url = getenv("OID4VCI_AUTH_SERVER_URL")
+    auth_server_type = getenv("OID4VCI_AUTH_SERVER_TYPE")
+    auth_server_client_str = getenv("OID4VCI_AUTH_SERVER_CLIENT")
+    if auth_server_url and auth_server_type and auth_server_client_str:
+        client_info = json.loads(auth_server_client_str)
+        return {
+            "public_url": auth_server_url,
+            "private_url": auth_server_url,
+            "auth_type": auth_server_type,
+            "client_credentials": {
+                "client_id": client_info.get("client_id"),
+                "client_secret": client_info.get("client_secret"),
+                "username": client_info.get("username"),
+                "password": client_info.get("password"),
+            },
+        }
     return None
 
 
@@ -102,7 +120,7 @@ async def get_auth_header(
     if not auth_type or not client_creds:
         raise ValueError("auth_server must specify 'auth_type' and 'client_credentials'.")
 
-    if auth_type == "client_secret_basic":
+    if auth_type in ("client_secret_basic", "keycloak"):
         cred = f"{client_creds['client_id']}:{client_creds['client_secret']}"
         b64_cred = str_to_b64(cred)
         auth_header = f"Basic {b64_cred}"

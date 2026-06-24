@@ -2,13 +2,36 @@ version: '3'
 
 services:
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.2
+    ports:
+      - "9001:8080"
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Enable the experimental OID4VCI feature
+      KC_FEATURES: oid4vc-vci,oid4vc-vci-preauth-code
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    command: ["start-dev", "--import-realm"]
+    volumes:
+      - ./keycloak/realm-import.json:/opt/keycloak/data/import/realm-import.json:ro,z
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
+      start_period: 60s
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
   issuer:
-    # from .. run
+    # from oid4vc/ run:
     # DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -f ./docker/Dockerfile --tag oid4vci .
     image: oid4vc
     build:
       dockerfile: docker/Dockerfile
-      context: ../
+      context: ..
     ports:
       - "3000:3000"
       - "3001:3001"
@@ -20,15 +43,15 @@ services:
       TUNNEL_ENDPOINT: http://ngrok:4040
       OID4VCI_HOST: 0.0.0.0
       OID4VCI_PORT: 8082
-      OID4VCI_STATUS_HANDLER: status_list.v1_0.status_handler
+      OID4VCI_AUTH_SERVER_URL: http://keycloak:8080/realms/oid4vc-demo
+      OID4VCI_AUTH_SERVER_TYPE: keycloak
+      OID4VCI_AUTH_SERVER_CLIENT: '{"client_id":"${KEYCLOAK_CLIENT_ID}","client_secret":"${KEYCLOAK_CLIENT_SECRET}","username":"${KEYCLOAK_USER:-demo-user}","password":"${KEYCLOAK_PASSWORD:-demo-password}"}'
       STATUS_LIST_SIZE: 131072
       STATUS_LIST_SHARD_SIZE: 131072
       #STATUS_LIST_PUBLIC_URI: https://localhost:8082/tenant/{tenant_id}/status/{list_number} Set in entrypoint.sh
       STATUS_LIST_FILE_PATH: /tmp/bitstring/{tenant_id}/{list_number}
     entrypoint: >
       /bin/sh -c '/entrypoint.sh aca-py "$$@"' --
-    # Note: --no-transport should be added to start but currently blocks webhooks - fix in ACA-Py main.
-    # A nice feature would be to have common sets to --block-plugin.
     command: >
       start
         --inbound-transport http 0.0.0.0 3000
@@ -46,9 +69,9 @@ services:
         --block-plugin acapy_agent.messaging.credential_definitions
         --block-plugin acapy_agent.revocation_anoncreds
         --block-plugin acapy_agent.anoncreds.default.did_indy
-        --block-plugin acapy_agent.anoncreds.default.did_web 
-        --block-plugin acapy_agent.anoncreds.default.legacy_indy 
-        --block-plugin acapy_agent.vc 
+        --block-plugin acapy_agent.anoncreds.default.did_web
+        --block-plugin acapy_agent.anoncreds.default.legacy_indy
+        --block-plugin acapy_agent.vc
         --block-plugin acapy_agent.vc.data_integrity
         --block-plugin acapy_agent.messaging.jsonld
         --block-plugin acapy_agent.anoncreds.revocation
@@ -96,7 +119,9 @@ services:
     depends_on:
       webhook-listener:
         condition: service_started
-      auth-server:
+      ngrok:
+        condition: service_started
+      keycloak:
         condition: service_healthy
 
   webhook-listener:
@@ -104,7 +129,6 @@ services:
     environment:
       - HTTP_PORT=8080
 
- #removed the healthcheck as it is unreliable. Authserver and issuer check for tunnels before starting.
   ngrok:
     image: ngrok/ngrok
     restart: unless-stopped
@@ -115,86 +139,32 @@ services:
       - ./ngrok.yml:/etc/ngrok.yml:ro
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    #removed the healthcheck as it is unreliable. Issuer checks for tunnel before starting.
     command: ["start", "--all", "--config", "/etc/ngrok.yml"]
 
   demo-app:
     build:
-      context: ./frontend
+      context: ../demo/frontend
     ports:
       - "3002:3000"
     volumes:
       - ./frontend/index.js:/app/index.js:z
-      - ./frontend/templates:/app/templates:z
+      - ./frontend/entrypoint.sh:/app/entrypoint.sh:ro,z
+      - ../demo/frontend/templates:/app/templates:z
     environment:
-      NODE_ENV: development # Set NODE_ENV to 'development'
+      NODE_ENV: development
       WDS_SOCKET_PORT: 0
       API_BASE_URL: http://issuer:3001
       FORCE_COLOR: 3
-      ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN
-      AUTHSERVER_NGROK_URL: $AUTHSERVER_NGROK_URL
-      TENANT_SECRET: tenantsecrettoken #Used by the issuer introspect tokens on auth server.
+      TUNNEL_ENDPOINT: http://ngrok:4040
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_USER: ${KEYCLOAK_USER:-demo-user}
+      KEYCLOAK_PASSWORD: ${KEYCLOAK_PASSWORD:-demo-password}
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
+    command: ["node", "index.js"]
     depends_on:
       issuer:
         condition: service_healthy
-
-
-  #setup Auth Server. 
-  #ADMIN_MANAGE_AUTH_TOKEN is sourced from the .env as it is shared with demo-app.
-  #Other environment variables are set explicitly here to show a working configuration.
-  #Admin full list: https://github.com/openwallet-foundation/acapy-plugins/blob/main/oid4vc/auth_server/admin/config.py
-  #Tenant full list:https://github.com/openwallet-foundation/acapy-plugins/blob/main/oid4vc/auth_server/tenant/config.py
-  auth-server:
-    build:
-      dockerfile: docker/Dockerfile
-      context: ../auth_server
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - ./init.sql:/usr/src/app/alembic/sql/init.sql:ro
-    environment:
-      ADMIN_DB_HOST: db
-      ADMIN_DB_USER: auth_server_admin
-      ADMIN_DB_PASSWORD: postgres
-      ADMIN_DB_NAME: auth_server_admin
-      ADMIN_DB_PORT: 5432
-      ADMIN_DB_SCHEMA: admin
-      ADMIN_APP_TITLE: OAuth 2.0 Authorization Server Admin API
-      ADMIN_APP_VERSION: 0.2.0
-      ADMIN_APP_ROOT_PATH: /
-      ADMIN_MANAGE_AUTH_TOKEN: $ADMIN_MANAGE_AUTH_TOKEN # Access the admin API with this token
-      ADMIN_INTERNAL_AUTH_TOKEN: $ADMIN_INTERNAL_AUTH_TOKEN # Admin API request to admin API
-      ADMIN_TENANT_DB_NAME: auth_server_tenant
-      ADMIN_TENANT_DB_SCHEMA: auth
-      TENANT_INTERNAL_BASE_URL: http://auth-server:9000/internal
-      TENANT_INTERNAL_AUTH_TOKEN: $TENANT_INTERNAL_AUTH_TOKEN # match ADMIN_INTERNAL_AUTH_TOKEN
-      TENANT_APP_ROOT_PATH: /
-      TENANT_DB_HOST: db
-      TENANT_DB_PORT: 5432
-      TENANT_PROXY_TRUSTED_HOSTS: "*"
-      #TENANT_ISSUER_BASE_URL: Set in entrypoint.sh
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: >
-        curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/healthz" | grep "200" > /dev/null &&
-        curl -s -o /dev/null -w '%{http_code}' "http://localhost:9001/healthz" | grep "200" > /dev/null
-      start_period: 30s
-      interval: 7s
-      timeout: 5s
-      retries: 5
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      ngrok:
+        condition: service_started
