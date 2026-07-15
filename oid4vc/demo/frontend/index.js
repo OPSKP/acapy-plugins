@@ -1392,7 +1392,7 @@ async function initializeIssuerMetadata() {
       authorization_servers: [
         {
           public_url: `${AUTHSERVER_BASE_URL}/tenants/${WALLET_ID}`,
-          private_url: `${AUTHSERVER_TENANT_INTERNAL_URL}}/tenants/${WALLET_ID}`,
+          private_url: `${AUTHSERVER_TENANT_INTERNAL_URL}/tenants/${WALLET_ID}`,
           auth_type: "client_secret_basic",
           client_credentials: {
             client_id: "client1",
